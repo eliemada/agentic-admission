@@ -3,6 +3,7 @@ htmlcov/
 reports/.coverage
 reports/coverage.xml
 reports/pytest.xml
+reports/*.pdf
 
 # Copier
 *.rej
