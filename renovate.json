@@ -1,0 +1,64 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":maintainLockFilesMonthly"
+  ],
+  "labels": ["dependencies"],
+  "commitMessagePrefix": "⬆️",
+  "automergeType": "pr",
+  "platformAutomerge": true,
+  "schedule": ["on saturday"],
+  "prHourlyLimit": 2,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["major"],
+      "commitMessagePrefix": "💥",
+      "labels": ["dependencies", "major"]
+    },
+    {
+      "matchUpdateTypes": ["minor"],
+      "commitMessagePrefix": "✨",
+      "labels": ["dependencies", "minor"],
+      "automerge": true
+    },
+    {
+      "matchUpdateTypes": ["patch"],
+      "commitMessagePrefix": "🐛",
+      "labels": ["dependencies", "patch"],
+      "automerge": true
+    },
+    {
+      "description": "Disable Python version updates in Docker",
+      "matchDepNames": ["python"],
+      "matchUpdateTypes": ["major", "minor"],
+      "enabled": false
+    },
+    {
+      "matchUpdateTypes": ["pin", "digest"],
+      "commitMessagePrefix": "📌",
+      "labels": ["dependencies", "pin"],
+      "automerge": true
+    },
+    {
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "commitMessagePrefix": "🔒",
+      "labels": ["dependencies", "lockfile"],
+      "automerge": true
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "commitMessagePrefix": "👷",
+      "labels": ["dependencies", "github_actions"],
+      "groupName": "github-actions",
+      "automerge": true
+    },
+    {
+      "description": "Group minor/patch Python deps",
+      "groupName": "python-deps",
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    }
+  ]
+}
