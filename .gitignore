@@ -4,6 +4,7 @@ reports/.coverage
 reports/coverage.xml
 reports/pytest.xml
 reports/*.pdf
+reports/*.html
 
 # Copier
 *.rej

@@ -133,6 +133,26 @@ type = "simple"
     [[tool.poe.tasks.test.sequence]]
     cmd = "coverage xml"
 
+  [tool.poe.tasks.extract]
+  help = "Extract all Excel files to Parquet"
+  cmd = "uv run python -m agentic_admission.extraction.pipeline"
+
+  [tool.poe.tasks.eda]
+  help = "Open the EDA notebook in the browser"
+  cmd = "marimo edit notebooks/eda.py"
+
+  [tool.poe.tasks.dossier-eda]
+  help = "Open the dossier EDA notebook in the browser"
+  cmd = "marimo edit notebooks/dossier_eda.py"
+
+  [tool.poe.tasks.export-eda]
+  help = "Export EDA notebook to reports/eda.html"
+  cmd = "marimo export html notebooks/eda.py -o reports/eda.html"
+
+  [tool.poe.tasks.export-dossier-eda]
+  help = "Export dossier EDA notebook to reports/dossier_eda.html"
+  cmd = "marimo export html notebooks/dossier_eda.py -o reports/dossier_eda.html"
+
   [tool.poe.tasks.run]
   help = "Run the admission agent"
   cmd = "uv run python -m agentic_admission.main"
