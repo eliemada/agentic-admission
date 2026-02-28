@@ -6,7 +6,8 @@
   etudiant: "Elie Bruno",
   superviseur: "Prof. Gaétan de Rassenfosse",
   resume: [
-    Réception des premiers dossiers de candidature par le superviseur.
+    Réception des dossiers de candidature (volées 2020--2026).
+    Transfert sur le cluster SCITAS et mise en place de l'environnement SSH.
     Extraction, inventaire et analyse exploratoire des dossiers étudiants.
     Conversion des guidelines d'admission en format exploitable pour le futur
     pipeline RAG.
@@ -20,8 +21,8 @@
   column-gutter: 10pt,
   metric(
     label: "Dossiers reçus",
-    value: "11",
-    detail: "Candidats MTE 2025–26",
+    value: "2020--26",
+    detail: "Toutes les volées MTE",
   ),
   metric(
     label: "Fichiers extraits",
@@ -45,9 +46,51 @@
 
 == Réception et organisation des dossiers
 
-Le superviseur a transmis 11 dossiers de candidature au format zip, chacun
-correspondant à un candidat pour le Master MTE 2025--26. Les dossiers ont été
-décompressés et organisés dans l'arborescence du projet :
+Avant la transmission des données, le superviseur a contacté les responsables
+IT de l'EPFL (sur recommandation de Nicolas Grandjean, AVP-E, et Chiara Tanteri,
+DPO) afin de s'assurer des bonnes pratiques pour l'hébergement et l'accès aux
+dossiers de candidature, qui contiennent des données sensibles :
+
+#quote(block: true)[
+  _Cher Carlos, cher Jean-François,_
+
+  _Nous allons commencer un projet de recherche avec un étudiant en master, Elie
+  (en cc), qui aura accès à des données sensibles, à savoir les dossiers de
+  candidature des autres étudiants._
+
+  _Les données seront traitées sur les serveurs de l'EPFL. Nous vous contactons
+  sur demande de Nicolas Grandjean (AVP-E) et Chiara Tanteri (DPO) afin de nous
+  assurer des bonnes pratiques pour l'hébergement et l'accès à ces données._
+
+  _--- Gaétan de Rassenfosse_
+]
+
+Les dossiers ont ensuite été transmis via SWITCHdrive avec des instructions
+précises de sécurité :
+
+#quote(block: true)[
+  _Bonjour Elie,_
+
+  _Je viens de partager un lien SWITCHdrive contenant les dossiers d'application
+  des étudiants. [...] Les fichiers seront disponibles dans 5 à 10 minutes._
+
+  _Le lien se désactivera dans quelques jours. Peux-tu :_
+  - _Les télécharger sur ton ordinateur personnel_
+  - _Les stocker sur le serveur de l'EPFL_
+  - _Les supprimer de ton ordinateur personnel_
+  - _Supprimer les documents d'identité dans chaque archive_
+  - _Supprimer les autres identifiants personnels dans les PDFs_
+
+  _--- Gaétan de Rassenfosse_
+]
+
+Les archives zip de l'ensemble des dossiers de candidature ont été reçues pour
+toutes les années académiques de 2020 à 2026. Les fichiers ont été téléchargés,
+décompressés et transférés sur le cluster HPC de l'EPFL (SCITAS). Le travail
+s'effectue désormais dans un environnement SSH sur le cluster.
+
+À titre d'exemple, les 11 dossiers de la volée MTE 2025--26 sont organisés
+comme suit :
 
 ```
 data/raw/applications/dossiers/
@@ -141,7 +184,7 @@ Les guidelines définissent notamment :
 #tache("Extraction de texte des PDFs", statut: "à faire")
 #tache("Détection scan vs. texte natif (OCR nécessaire ?)", statut: "à faire")
 #tache("Pipeline d'anonymisation des données sensibles", statut: "en cours")
-#tache("Connexion et tests sur les clusters HPC SCITAS", statut: "à faire")
+#tache("Transfert des données et mise en place de l'environnement SSH sur SCITAS", statut: "fait")
 
 // ── Plan semaine prochaine ───────────────────────────────────────────────────
 
