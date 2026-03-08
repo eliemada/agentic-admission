@@ -101,10 +101,7 @@ def _find_candidate_number(normed: list[str]) -> tuple[int, set[int]]:
     return 0, {0}
 
 
-def _match_header_patterns(
-    normed: list[str],
-    used: set[int],
-) -> tuple[dict[str, int], set[int]]:
+def _match_header_patterns(normed: list[str], used: set[int]) -> tuple[dict[str, int], set[int]]:
     """Apply ``_HEADER_RULES`` to identify candidate-info columns.
 
     Returns
@@ -131,10 +128,7 @@ def _match_header_patterns(
     return mapping, new_used
 
 
-def _match_decision_columns(
-    normed: list[str],
-    used: set[int],
-) -> tuple[dict[str, int], set[int]]:
+def _match_decision_columns(normed: list[str], used: set[int]) -> tuple[dict[str, int], set[int]]:
     """Identify aggregate decision columns (order-dependent).
 
     Returns
@@ -165,9 +159,7 @@ def _match_decision_columns(
 
 
 def _find_evaluator_triplet(
-    headers: list[str],
-    used: set[int],
-    mapping: dict[str, int],
+    headers: list[str], used: set[int], mapping: dict[str, int]
 ) -> dict[str, int]:
     """Locate the evaluator triplet (initials, decision, comment).
 
@@ -181,13 +173,9 @@ def _find_evaluator_triplet(
         ``_eval_comment``.
     """
     last_info_col = max(
-        mapping.get("gpa_max", 0),
-        mapping.get("gpa_candidate", 0),
-        mapping.get("gpa_scale", 0),
+        mapping.get("gpa_max", 0), mapping.get("gpa_candidate", 0), mapping.get("gpa_scale", 0)
     )
-    candidates = [
-        i for i in range(last_info_col + 1, len(headers)) if i not in used
-    ]
+    candidates = [i for i in range(last_info_col + 1, len(headers)) if i not in used]
     result: dict[str, int] = {}
     if len(candidates) >= _EVAL_TRIPLET_MIN:
         result["_eval_initials"] = candidates[0]
@@ -237,9 +225,7 @@ def _map_columns(headers: list[str]) -> dict[str, int]:
 # Filename metadata
 # ---------------------------------------------------------------------------
 
-_FILENAME_RE = re.compile(
-    r"mte_applications_(?P<year>[\d\-]+)_(?P<round>round\d+)\.xlsx",
-)
+_FILENAME_RE = re.compile(r"mte_applications_(?P<year>[\d\-]+)_(?P<round>round\d+)\.xlsx")
 
 
 def _parse_filename(name: str) -> tuple[str, str]:
@@ -280,10 +266,7 @@ def _is_new_candidate(val: Any) -> bool:
     return True
 
 
-def _group_rows(
-    rows: list[list[Any]],
-    num_col: int,
-) -> list[list[list[Any]]]:
+def _group_rows(rows: list[list[Any]], num_col: int) -> list[list[list[Any]]]:
     """Group Excel rows into per-candidate bundles.
 
     A new candidate starts whenever ``rows[r][num_col]`` is a non-empty
@@ -324,10 +307,7 @@ def _group_rows(
 # ---------------------------------------------------------------------------
 
 
-def _collect_evaluations(
-    group: list[list[Any]],
-    col_map: dict[str, int],
-) -> str:
+def _collect_evaluations(group: list[list[Any]], col_map: dict[str, int]) -> str:
     """Merge committee evaluations from all rows into a single string."""
     init_col = col_map.get("_eval_initials")
     dec_col = col_map.get("_eval_decision")
@@ -352,11 +332,7 @@ def _collect_evaluations(
     return "\n".join(evaluations)
 
 
-def _first_nonempty(
-    group: list[list[Any]],
-    col_map: dict[str, int],
-    field: str,
-) -> str:
+def _first_nonempty(group: list[list[Any]], col_map: dict[str, int], field: str) -> str:
     """Return the first non-empty value for *field* across all rows."""
     idx = col_map.get(field)
     if idx is None:
@@ -368,11 +344,7 @@ def _first_nonempty(
     return ""
 
 
-def _detect_gender(
-    group: list[list[Any]],
-    col_map: dict[str, int],
-    primary: list[Any],
-) -> str:
+def _detect_gender(group: list[list[Any]], col_map: dict[str, int], primary: list[Any]) -> str:
     """Detect gender from a labeled column or hidden column 2."""
     gender_idx = col_map.get("gender")
     if gender_idx is not None:
@@ -442,9 +414,7 @@ def _extract_candidate(
         gender=_detect_gender(group, col_map, primary),
         committee_evaluations=_collect_evaluations(group, col_map),
         decision_section=_first_nonempty(group, col_map, "decision_section"),
-        decision_permanent_member=_first_nonempty(
-            group, col_map, "decision_permanent_member",
-        ),
+        decision_permanent_member=_first_nonempty(group, col_map, "decision_permanent_member"),
         decision_final=_first_nonempty(group, col_map, "decision_final"),
     )
 
@@ -487,17 +457,9 @@ def parse_file(filepath: Path) -> list[CandidateRecord]:
     num_col = col_map.get("candidate_number", 0)
     groups = _group_rows(all_rows, num_col)
 
-    logger.info(
-        "Parsed {} → {} candidates from {} rows",
-        filepath.name,
-        len(groups),
-        len(all_rows),
-    )
+    logger.info("Parsed {} → {} candidates from {} rows", filepath.name, len(groups), len(all_rows))
 
-    return [
-        _extract_candidate(g, col_map, filepath.name, year, rnd)
-        for g in groups
-    ]
+    return [_extract_candidate(g, col_map, filepath.name, year, rnd) for g in groups]
 
 
 # ---------------------------------------------------------------------------
@@ -507,9 +469,7 @@ def parse_file(filepath: Path) -> list[CandidateRecord]:
 
 def _records_to_table(records: list[CandidateRecord]) -> pa.Table:
     """Convert a list of candidate records to a PyArrow table."""
-    columns: dict[str, list[Any]] = {
-        field: [] for field in CandidateRecord.model_fields
-    }
+    columns: dict[str, list[Any]] = {field: [] for field in CandidateRecord.model_fields}
     for rec in records:
         dump = rec.model_dump()
         for field, col_list in columns.items():
@@ -517,10 +477,7 @@ def _records_to_table(records: list[CandidateRecord]) -> pa.Table:
     return pa.table(columns)
 
 
-def run_pipeline(
-    input_dir: Path = _DATA_RAW,
-    output_path: Path = _DATA_OUT,
-) -> Path:
+def run_pipeline(input_dir: Path = _DATA_RAW, output_path: Path = _DATA_OUT) -> Path:
     """Read all admission Excel files and write a single Parquet file.
 
     Parameters
