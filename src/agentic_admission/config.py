@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +25,9 @@ class Settings(BaseSettings):
         Minimum confidence for PII detection (0.0–1.0).
     gliner_model : str
         GLiNER model ID for zero-shot NER in Presidio.
+    anonymizer_excluded_entities : frozenset[str]
+        Entity types to preserve (not anonymize). Parsed from comma-separated
+        env var at startup.
     """
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -33,8 +37,21 @@ class Settings(BaseSettings):
     model_base_url: str = "http://localhost:8000/v1"
     vlm_model_name: str = "Qwen/Qwen3-VL-8B-Instruct"
     vlm_base_url: str = "http://localhost:8001/v1"
-    presidio_score_threshold: float = 0.35
+    presidio_score_threshold: float = 0.5
     gliner_model: str = "urchade/gliner_multi_pii-v1"
+    anonymizer_excluded_entities: frozenset[str] = frozenset({
+        "LOCATION",
+        "NRP",
+        "organization",
+        "ORGANIZATION",
+    })
+
+    @field_validator("anonymizer_excluded_entities", mode="before")
+    @classmethod
+    def _parse_excluded_entities(cls, v: object) -> frozenset[str]:
+        if isinstance(v, str):
+            return frozenset(e.strip() for e in v.split(",") if e.strip())
+        return frozenset(v)  # type: ignore[arg-type]
 
 
 settings = Settings()

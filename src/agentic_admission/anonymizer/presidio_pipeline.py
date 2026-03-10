@@ -61,6 +61,9 @@ _ENTITY_PLACEHOLDER_MAP: dict[str, str] = {
 
 _DEFAULT_PLACEHOLDER = "<PII>"
 
+# Entity types handled by DobYearOperator (preserves birth year).
+_DOB_ENTITY_TYPES: frozenset[str] = frozenset({"date of birth"})
+
 # GLiNER entity labels to request (zero-shot — tell it what to find).
 _GLINER_ENTITIES = [
     "person",
@@ -156,7 +159,10 @@ def build_analyzer() -> Any:
 
 
 def build_anonymizer() -> Any:
-    """Build a Presidio AnonymizerEngine.
+    """Build a Presidio AnonymizerEngine with custom operators.
+
+    Registers :class:`~agentic_admission.anonymizer.dob_operator.DobYearOperator`
+    so that ``"date of birth"`` entities preserve the birth year.
 
     Returns
     -------
@@ -165,7 +171,11 @@ def build_anonymizer() -> Any:
     """
     from presidio_anonymizer import AnonymizerEngine
 
-    return AnonymizerEngine()
+    from agentic_admission.anonymizer.dob_operator import DobYearOperator
+
+    engine = AnonymizerEngine()
+    engine.add_anonymizer(DobYearOperator)
+    return engine
 
 
 # ---------------------------------------------------------------------------
@@ -190,8 +200,11 @@ def _build_operators(entity_types: list[str]) -> dict[str, Any]:
 
     operators: dict[str, Any] = {}
     for entity_type in entity_types:
-        placeholder = _ENTITY_PLACEHOLDER_MAP.get(entity_type, _DEFAULT_PLACEHOLDER)
-        operators[entity_type] = OperatorConfig("replace", {"new_value": placeholder})
+        if entity_type in _DOB_ENTITY_TYPES:
+            operators[entity_type] = OperatorConfig("dob_year", {})
+        else:
+            placeholder = _ENTITY_PLACEHOLDER_MAP.get(entity_type, _DEFAULT_PLACEHOLDER)
+            operators[entity_type] = OperatorConfig("replace", {"new_value": placeholder})
     return operators
 
 
@@ -201,6 +214,8 @@ def anonymize_text(
     anonymizer: Any,
     *,
     score_threshold: float | None = None,
+    allow_list: list[str] | None = None,
+    filter_pipeline: list[Any] | None = None,
 ) -> tuple[str, dict[str, int]]:
     """Detect and replace PII in *text*.
 
@@ -214,6 +229,12 @@ def anonymize_text(
         A ``PresidioAnonymizerEngine`` instance.
     score_threshold
         Minimum confidence for PII detection. Defaults to settings value.
+    allow_list
+        Terms to never flag as PII. Defaults to domain allow-list
+        from :func:`~agentic_admission.anonymizer.allow_lists.build_allow_list`.
+    filter_pipeline
+        Post-analysis filter functions. Defaults to the standard pipeline
+        from :func:`~agentic_admission.anonymizer.post_filters.build_filter_pipeline`.
 
     Returns
     -------
@@ -221,13 +242,26 @@ def anonymize_text(
         (anonymized_text, entity_counts) where entity_counts maps
         entity type names to the number of occurrences found.
     """
+    from agentic_admission.anonymizer.allow_lists import build_allow_list
+    from agentic_admission.anonymizer.post_filters import apply_filters, build_filter_pipeline
+
     threshold = score_threshold if score_threshold is not None else settings.presidio_score_threshold
+
+    effective_allow_list = allow_list if allow_list is not None else build_allow_list()
 
     results = analyzer.analyze(
         text=text,
         language="en",
         score_threshold=threshold,
+        allow_list=effective_allow_list,
     )
+
+    if not results:
+        return text, {}
+
+    # Apply post-analysis filters to reduce false positives.
+    effective_filters = filter_pipeline if filter_pipeline is not None else build_filter_pipeline()
+    results = apply_filters(text, results, effective_filters)
 
     if not results:
         return text, {}
