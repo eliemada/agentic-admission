@@ -1,0 +1,213 @@
+#import "template.typ": *
+
+#show: weekly-report.with(
+  semaine: 4,
+  date: "10 mars 2026",
+  etudiant: "Elie Bruno",
+  superviseur: "Prof. Gaétan de Rassenfosse",
+  resume: [
+    Suite au feedback du Prof. de Rassenfosse, l'anonymisation a été
+    calibrée pour préserver les signaux utiles à la décision d'admission
+    (année de naissance, localisation, langues, institutions) tout en
+    continuant à masquer les vrais PII. Validé sur 6 documents
+    (2 candidats, 3 types de documents).
+  ],
+)
+
+// -- Métriques de la semaine ------------------------------------------------
+
+#grid(
+  columns: (1fr, 1fr, 1fr),
+  column-gutter: 10pt,
+  metric(
+    label: "Tests unitaires",
+    value: "135",
+    detail: "Tous passent",
+  ),
+  metric(
+    label: "Entités exclues",
+    value: "4",
+    detail: "LOCATION, NRP, ORG, organization",
+  ),
+  metric(
+    label: "Avancement global",
+    value: "30%",
+    detail: "Phase : Anonymisation v2",
+  ),
+)
+
+#v(0.3cm)
+
+#progress-bar(pourcentage: 30, label: "Progression du projet")
+
+// -- Travail effectué -------------------------------------------------------
+
+= Travail effectué
+
+== Feedback Prof. de Rassenfosse
+
+L'anonymisation de la semaine 3 était fonctionnelle mais *trop agressive*
+pour un usage en décision d'admission. Quatre points spécifiques ont été
+soulevés :
+
++ *Date de naissance* : l'âge est un critère de rejet, il faut garder
+  l'année de naissance
++ *Localisation* : permet d'identifier l'expérience internationale
++ *Langues* : compétence importante à conserver
++ *Noms d'institutions* : signal important dans les lettres de référence
+  et les CV
+
+== Calibrage de l'anonymisation
+
+Trois mécanismes coordonnés ont été implémentés, chacun ciblant le bon
+point d'interception dans le pipeline :
+
+=== 1. Filtre d'exclusion d'entités (post-filtre)
+
+Nouveau filtre `filter_excluded_entities()` placé en *première position*
+dans le pipeline de filtres. Il supprime les résultats dont le type
+d'entité est dans un ensemble configurable via la variable d'environnement
+`ANONYMIZER_EXCLUDED_ENTITIES`.
+
+*Pourquoi un post-filtre ?* Retirer les types de `_ENTITY_PLACEHOLDER_MAP`
+ne suffit pas car Presidio les détecterait quand même. Retirer de
+`_GLINER_ENTITIES` n'affecterait que GLiNER, pas les recognizers
+Presidio intégrés. Le post-filtre agit comme un portail universel
+après tous les recognizers.
+
+Entités exclues par défaut : `LOCATION`, `NRP`, `organization`,
+`ORGANIZATION`.
+
+#callout(titre: "Point technique", icon: "◆", couleur: rgb("#2563EB"))[
+  `organization` (minuscule) vient de GLiNER, `ORGANIZATION` (majuscule)
+  vient du recognizer Presidio intégré. Les deux doivent être exclus
+  pour éviter les faux positifs sur les noms d'institutions.
+  Première version n'excluait que le minuscule --- 26 faux positifs
+  sur le Statement of Purpose.
+]
+
+=== 2. Allow-list LANGUAGES
+
+Même avec NRP exclu, des noms de langues comme « French » pouvaient être
+capturés comme `PERSON` par d'autres recognizers. Un `frozenset` de 75
+langues naturelles a été ajouté comme 6#super[e] catégorie d'allow-list
+(défense en profondeur).
+
+=== 3. Opérateur DOB personnalisé
+
+Classe `DobYearOperator` (sous-classe de `presidio_anonymizer.Operator`)
+qui extrait l'année à 4 chiffres du texte détecté et produit
+`<DOB_1995>` au lieu de `<DOB>`. Regex : `\\b((?:19|20)\\d{2})\\b`.
+Fallback vers `<DOB>` si aucune année trouvée.
+Appliqué uniquement aux entités `"date of birth"` (GLiNER) ;
+`DATE_TIME` (Presidio) reste `<DATE>`.
+
+== Validation sur échantillon élargi
+
+Pipeline testé sur `test_anon` (2 candidats, 6 documents : CV, lettre de
+motivation, lettre de recommandation).
+
+#callout(titre: "Résultats", icon: "✓", couleur: rgb("#10B981"))[
+  *DOB* : `05/08/1984` → `<DOB_1984>` --- année préservée \
+  *Locations* : Egypt, Saudi Arabia, Dubai, Switzerland, Lausanne, Beyrouth
+  --- toutes préservées \
+  *Langues* : Arabic (native), French (beginner), English --- préservées \
+  *Institutions* : EPFL, UNESCO, Université Saint Joseph, USJ ESIB,
+  British Council, INTERNATIONAL ADVANCED TECHNOLOGY --- préservées \
+  *Vrais PII* : noms → `<PERSON>`, emails → `<EMAIL>`, téléphones →
+  `<PHONE>`, adresses → `<ADDRESS>` --- toujours anonymisés
+]
+
+== Architecture du pipeline d'anonymisation
+
+```
+Texte brut
+  │
+  ▼
+Presidio AnalyzerEngine (GLiNER + recognizers custom)
+  │
+  ├─ Allow-list (6 catégories : institutions, académique,
+  │  pronoms, technique, activités, LANGUES)
+  │
+  ▼
+Post-filtres (appliqués séquentiellement) :
+  1. filter_excluded_entities  ← NOUVEAU (LOCATION, NRP, ORG)
+  2. filter_by_entity_threshold
+  3. filter_partial_words
+  4. filter_by_length
+  5. filter_common_words
+  6. filter_duration_as_date
+  │
+  ▼
+Presidio AnonymizerEngine
+  ├─ DobYearOperator          ← NOUVEAU (date of birth → <DOB_YYYY>)
+  └─ replace operator          (tous les autres types)
+  │
+  ▼
+Texte anonymisé
+```
+
+// -- Défis et obstacles -----------------------------------------------------
+
+= Défis et obstacles
+
+#callout(titre: "Non-déterminisme GLiNER", icon: "⚠", couleur: rgb("#EF4444"))[
+  Le modèle GLiNER produit parfois des entités différentes entre deux
+  exécutions sur le même texte. Observé : un span de texte détecté
+  comme `EPFL_SCIPER` lors d'une exécution mais pas la suivante, alors
+  qu'aucun nombre à 6 chiffres n'était présent. Le pipeline de filtres
+  gère ces cas, mais cela implique une légère variabilité des résultats.
+]
+
+- *Extraction PDF lente sur CPU* : Docling met ~25 min par PDF en local.
+  La conversion à grande échelle nécessite SCITAS (GPU).
+- *Docling instable sur certains scans* : crash sur une lettre de
+  recommandation scannée (bug PIL/image de taille nulle)
+
+// -- Fichiers modifiés -----------------------------------------------------
+
+= Fichiers modifiés
+
+#callout(titre: "Résumé des changements", icon: "◆", couleur: rgb("#8B5CF6"))[
+  *8 fichiers modifiés, 2 fichiers créés, 135 tests (27 nouveaux)* \
+  \
+  `config.py` --- ajout `anonymizer_excluded_entities` (frozenset + validateur) \
+  `allow_lists.py` --- ajout `LANGUAGES` (75 langues), `ALL_CATEGORIES` 5→6 \
+  `post_filters.py` --- ajout `filter_excluded_entities()`, pipeline 5→6 filtres \
+  `dob_operator.py` --- *nouveau* : `DobYearOperator` (Presidio Operator) \
+  `presidio_pipeline.py` --- câblage opérateur DOB, `_DOB_ENTITY_TYPES` \
+  `__init__.py` --- docstring mis à jour \
+  `.env.example` --- ajout `ANONYMIZER_EXCLUDED_ENTITIES` \
+  Tests : `test_allow_lists.py`, `test_post_filters.py`,
+  `test_presidio_pipeline.py` mis à jour + `test_dob_operator.py` nouveau
+]
+
+// -- Tâches -----------------------------------------------------------------
+
+= Suivi des tâches
+
+#tache("Filtre d'exclusion d'entités (LOCATION, NRP, ORG)", statut: "fait")
+#tache("Allow-list LANGUAGES (75 langues)", statut: "fait")
+#tache("Opérateur DOB personnalisé (<DOB_YYYY>)", statut: "fait")
+#tache("Tests unitaires (135 tests, couverture ≥ 40%)", statut: "fait")
+#tache("Validation sur 2 candidats (6 documents)", statut: "fait")
+#tache("Documentation logique d'anonymisation", statut: "fait")
+#tache("Conversion PDF → Markdown à grande échelle", statut: "bloqué")
+#tache("Anonymisation corpus complet", statut: "à faire")
+#tache("Pipeline LLM : évaluation vs décision comité", statut: "à faire")
+
+// -- Plan semaine prochaine -------------------------------------------------
+
+= Plan pour la semaine prochaine
+
+== Priorité haute
+- Conversion PDF → Markdown sur SCITAS (GPU) pour les ~13 600 fichiers
+- Anonymisation à grande échelle et validation sur 50--100 dossiers
+- Corriger les faux positifs résiduels (`AGE` sur « 5 years »,
+  `DATE_TIME` sur « fourth-year »)
+
+== Priorité moyenne
+- Lier les dossiers anonymisés aux données structurées Parquet
+  (décisions du comité, GPA, université)
+- Premiers tests d'évaluation LLM : guidelines en contexte + dossier,
+  comparer décision modèle vs comité
