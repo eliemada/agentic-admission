@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     presidio_score_threshold: float = 0.5
     gliner_model: str = "urchade/gliner_multi_pii-v1"
     anonymizer_excluded_entities: frozenset[str] = frozenset(
-        {"LOCATION", "NRP", "organization", "ORGANIZATION"}
+        {"LOCATION", "address", "NRP", "organization", "ORGANIZATION"}
     )
 
     @field_validator("anonymizer_excluded_entities", mode="before")
