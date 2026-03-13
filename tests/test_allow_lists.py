@@ -82,6 +82,11 @@ class TestBuildAllowList:
     def test_all_categories_merged(self) -> None:
         result_set = set(build_allow_list())
         for category in (
-            INSTITUTIONS, ACADEMIC_TERMS, PRONOUNS, TECHNICAL_TERMS, ACTIVITIES, LANGUAGES,
+            INSTITUTIONS,
+            ACADEMIC_TERMS,
+            PRONOUNS,
+            TECHNICAL_TERMS,
+            ACTIVITIES,
+            LANGUAGES,
         ):
             assert category.issubset(result_set)

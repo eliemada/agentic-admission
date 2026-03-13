@@ -17,21 +17,9 @@ from presidio_analyzer import Pattern, PatternRecognizer
 # ---------------------------------------------------------------------------
 
 _AVS_PATTERNS = [
-    Pattern(
-        name="avs_dots",
-        regex=r"\b756\.\d{4}\.\d{4}\.\d{2}\b",
-        score=0.9,
-    ),
-    Pattern(
-        name="avs_dashes",
-        regex=r"\b756-\d{4}-\d{4}-\d{2}\b",
-        score=0.9,
-    ),
-    Pattern(
-        name="avs_spaces",
-        regex=r"\b756\s\d{4}\s\d{4}\s\d{2}\b",
-        score=0.85,
-    ),
+    Pattern(name="avs_dots", regex=r"\b756\.\d{4}\.\d{4}\.\d{2}\b", score=0.9),
+    Pattern(name="avs_dashes", regex=r"\b756-\d{4}-\d{4}-\d{2}\b", score=0.9),
+    Pattern(name="avs_spaces", regex=r"\b756\s\d{4}\s\d{4}\s\d{2}\b", score=0.85),
 ]
 
 
@@ -55,22 +43,9 @@ class AvsAhvRecognizer(PatternRecognizer):
 # SCIPER recognizer
 # ---------------------------------------------------------------------------
 
-_SCIPER_PATTERNS = [
-    Pattern(
-        name="sciper_6digit",
-        regex=r"\b\d{6}\b",
-        score=0.3,
-    ),
-]
+_SCIPER_PATTERNS = [Pattern(name="sciper_6digit", regex=r"\b\d{6}\b", score=0.3)]
 
-_SCIPER_CONTEXT = [
-    "SCIPER",
-    "sciper",
-    "Sciper",
-    "matricule",
-    "student ID",
-    "numéro étudiant",
-]
+_SCIPER_CONTEXT = ["SCIPER", "sciper", "Sciper", "matricule", "student ID", "numéro étudiant"]
 
 
 class SciperRecognizer(PatternRecognizer):

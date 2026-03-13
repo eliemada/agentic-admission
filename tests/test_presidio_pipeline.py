@@ -9,7 +9,6 @@ import pytest
 
 from agentic_admission.anonymizer.presidio_pipeline import (
     _DOB_ENTITY_TYPES,
-    AnonymizationReport,
     _build_operators,
     _collect_md_files,
     _should_skip,
@@ -258,7 +257,7 @@ class TestAnonymizeTextIntegration:
     def test_detects_email(self, engines) -> None:
         analyzer, anonymizer = engines
         text = "Please contact sarah.connor@example.com for details."
-        result, counts = anonymize_text(text, analyzer, anonymizer)
+        result, _counts = anonymize_text(text, analyzer, anonymizer)
 
         assert "sarah.connor@example.com" not in result
         assert "<EMAIL>" in result or "<PII>" in result
@@ -266,14 +265,14 @@ class TestAnonymizeTextIntegration:
     def test_detects_phone(self, engines) -> None:
         analyzer, anonymizer = engines
         text = "Call me at +41 79 123 45 67 for more info."
-        result, counts = anonymize_text(text, analyzer, anonymizer)
+        result, _counts = anonymize_text(text, analyzer, anonymizer)
 
         assert "+41 79 123 45 67" not in result
 
     def test_detects_avs_number(self, engines) -> None:
         analyzer, anonymizer = engines
         text = "My AVS number is 756.1234.5678.90."
-        result, counts = anonymize_text(text, analyzer, anonymizer)
+        result, _counts = anonymize_text(text, analyzer, anonymizer)
 
         assert "756.1234.5678.90" not in result
 

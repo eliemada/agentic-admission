@@ -61,7 +61,7 @@ class ThresholdConfig:
     """
 
     entity_thresholds: dict[str, float] = field(
-        default_factory=lambda: dict(_DEFAULT_ENTITY_THRESHOLDS),
+        default_factory=lambda: dict(_DEFAULT_ENTITY_THRESHOLDS)
     )
     fallback: float = _DEFAULT_FALLBACK
 
@@ -82,9 +82,7 @@ class ThresholdConfig:
 
 
 def build_threshold_config(
-    *,
-    overrides: dict[str, float] | None = None,
-    fallback: float | None = None,
+    *, overrides: dict[str, float] | None = None, fallback: float | None = None
 ) -> ThresholdConfig:
     """Create a :class:`ThresholdConfig` with optional overrides.
 

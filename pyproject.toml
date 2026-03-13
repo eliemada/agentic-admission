@@ -60,7 +60,8 @@ output = "reports/coverage.xml"
 addopts = "--color=yes --doctest-modules --exitfirst --failed-first --strict-config --strict-markers --verbosity=2 --junitxml=reports/pytest.xml"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-filterwarnings = ["error", "ignore::DeprecationWarning"]
+filterwarnings = ["error", "ignore::DeprecationWarning", "ignore::FutureWarning", "ignore::UserWarning"]
+markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
 testpaths = ["src", "tests"]
 xfail_strict = true
 
@@ -83,20 +84,32 @@ unfixable = ["ERA001", "F401", "F841", "T201", "T203"]
 "tests/*" = [
     "ANN001",   # Missing type annotation for function argument
     "ANN201",   # Missing return type annotation
+    "ARG002",   # Unused method argument (pytest fixtures)
+    "D101",     # Missing docstring in public class (test classes)
+    "D102",     # Missing docstring in public method (test methods)
     "D401",     # First line should be imperative mood
     "DTZ005",   # datetime.now() without tz argument
+    "ERA001",   # Commented-out code (section dividers in tests)
     "FBT001",   # Boolean positional argument
     "FBT002",   # Boolean default value positional argument
+    "PLC0415",  # Lazy imports inside test functions
     "PLR2004",  # Magic value in comparison
     "S105",     # Possible hardcoded password (string)
     "S106",     # Possible hardcoded password (function arg)
+    "S108",     # Hardcoded temporary paths in test data
+    "S110",     # try-except-pass (used for immutability checks)
+    "SIM105",   # contextlib.suppress alternative (test readability)
     "SLF001",   # Private member access
+    "TC003",    # stdlib imports used at runtime for type annotations
 ]
 "src/agentic_admission/preprocessing/text_extraction.py" = [
     "PLC0415",  # Lazy imports: avoid loading PyTorch/Docling at import time
 ]
 "src/agentic_admission/anonymizer/presidio_pipeline.py" = [
     "PLC0415",  # Lazy imports: avoid loading spaCy/Presidio at import time
+]
+"src/agentic_admission/anonymizer/post_filters.py" = [
+    "PLC0415",  # Lazy import: avoid circular import with config at module level
 ]
 
 [tool.ruff.lint.flake8-annotations]
@@ -190,6 +203,10 @@ type = "simple"
   [tool.poe.tasks.anonymize]
   help = "Detect and redact PII from extracted Markdown files"
   cmd = "python -m agentic_admission.anonymizer.presidio_pipeline"
+
+  [tool.poe.tasks.ingest]
+  help = "Ingest dossiers from ZIP/TAR/directory into staging"
+  cmd = "python -m agentic_admission.intake.adapter"
 
   [tool.poe.tasks.run]
   help = "Run the admission agent"

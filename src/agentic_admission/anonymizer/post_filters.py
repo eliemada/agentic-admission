@@ -25,6 +25,7 @@ def _get_excluded_entities() -> frozenset[str]:
 
     return settings.anonymizer_excluded_entities
 
+
 # Type alias for filter functions.
 FilterFunc = Callable[[str, list[Any]], list[Any]]
 
@@ -32,28 +33,93 @@ FilterFunc = Callable[[str, list[Any]], list[Any]]
 # Common-word sets for pronoun / determiner filtering
 # ---------------------------------------------------------------------------
 
-_COMMON_WORDS: frozenset[str] = frozenset({
-    # Pronouns
-    "i", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them",
-    "my", "his", "its", "our", "their", "myself", "himself", "herself",
-    "itself", "ourselves", "themselves", "you", "your", "yours", "yourself",
-    # Determiners / prepositions often misidentified
-    "the", "a", "an", "this", "that", "these", "those",
-    "in", "on", "at", "to", "for", "of", "with", "by", "from",
-    "and", "or", "but", "not", "no", "if", "so", "as", "is", "am", "are",
-    "was", "were", "be", "been", "being", "has", "have", "had", "do", "does",
-    "did", "will", "would", "shall", "should", "may", "might", "can", "could",
-})
+_COMMON_WORDS: frozenset[str] = frozenset(
+    {
+        # Pronouns
+        "i",
+        "he",
+        "she",
+        "it",
+        "we",
+        "they",
+        "me",
+        "him",
+        "her",
+        "us",
+        "them",
+        "my",
+        "his",
+        "its",
+        "our",
+        "their",
+        "myself",
+        "himself",
+        "herself",
+        "itself",
+        "ourselves",
+        "themselves",
+        "you",
+        "your",
+        "yours",
+        "yourself",
+        # Determiners / prepositions often misidentified
+        "the",
+        "a",
+        "an",
+        "this",
+        "that",
+        "these",
+        "those",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "by",
+        "from",
+        "and",
+        "or",
+        "but",
+        "not",
+        "no",
+        "if",
+        "so",
+        "as",
+        "is",
+        "am",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "has",
+        "have",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "shall",
+        "should",
+        "may",
+        "might",
+        "can",
+        "could",
+    }
+)
 
 # Entity types that are prone to common-word false positives.
-_COMMON_WORD_ENTITY_TYPES: frozenset[str] = frozenset({
-    "PERSON", "person", "name", "LOCATION", "NRP", "organization",
-})
+_COMMON_WORD_ENTITY_TYPES: frozenset[str] = frozenset(
+    {"PERSON", "person", "name", "LOCATION", "NRP", "organization"}
+)
 
 # Duration pattern: digits followed by time units (not calendar dates).
 _DURATION_PATTERN = re.compile(
-    r"^\d+\s*(?:years?|months?|weeks?|days?|hours?|semesters?)$",
-    re.IGNORECASE,
+    r"^\d+\s*(?:years?|months?|weeks?|days?|hours?|semesters?)$", re.IGNORECASE
 )
 
 # Minimum entity text length by entity type.
@@ -76,10 +142,7 @@ _DEFAULT_MIN_LENGTH = 1
 
 
 def filter_excluded_entities(
-    text: str,
-    results: list[Any],
-    *,
-    excluded: frozenset[str] | None = None,
+    text: str, results: list[Any], *, excluded: frozenset[str] | None = None
 ) -> list[Any]:
     """Drop results whose entity type is in the exclusion set.
 
@@ -107,10 +170,7 @@ def filter_excluded_entities(
 
 
 def filter_by_entity_threshold(
-    text: str,
-    results: list[Any],
-    *,
-    config: ThresholdConfig | None = None,
+    text: str, results: list[Any], *, config: ThresholdConfig | None = None
 ) -> list[Any]:
     """Drop results below per-entity-type minimum confidence.
 
@@ -292,11 +352,7 @@ def build_filter_pipeline(
     ]
 
 
-def apply_filters(
-    text: str,
-    results: list[Any],
-    filters: Sequence[FilterFunc],
-) -> list[Any]:
+def apply_filters(text: str, results: list[Any], filters: Sequence[FilterFunc]) -> list[Any]:
     """Apply a sequence of filters to analyzer results.
 
     Parameters

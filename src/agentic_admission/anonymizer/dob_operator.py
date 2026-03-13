@@ -22,7 +22,7 @@ class DobYearOperator(Operator):
     Falls back to ``<DOB>`` if no 4-digit year is found in the matched text.
     """
 
-    def operate(self, text: str = "", params: dict[str, Any] | None = None) -> str:
+    def operate(self, text: str = "", params: dict[str, Any] | None = None) -> str:  # noqa: ARG002
         """Replace *text* with a year-preserving DOB placeholder.
 
         Parameters

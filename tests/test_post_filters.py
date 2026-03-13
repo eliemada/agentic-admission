@@ -56,13 +56,8 @@ class TestFilterExcludedEntities:
 
     def test_keeps_non_excluded_entities(self) -> None:
         text = "John Smith lives in Zurich"
-        results: list[Any] = [
-            FakeResult("PERSON", 0, 10, 0.9),
-            FakeResult("LOCATION", 20, 26, 0.8),
-        ]
-        filtered = filter_excluded_entities(
-            text, results, excluded=frozenset({"LOCATION"}),
-        )
+        results: list[Any] = [FakeResult("PERSON", 0, 10, 0.9), FakeResult("LOCATION", 20, 26, 0.8)]
+        filtered = filter_excluded_entities(text, results, excluded=frozenset({"LOCATION"}))
         assert len(filtered) == 1
         assert filtered[0].entity_type == "PERSON"
 
@@ -81,7 +76,7 @@ class TestFilterExcludedEntities:
             FakeResult("PERSON", 6, 12, 0.9),
         ]
         filtered = filter_excluded_entities(
-            text, results, excluded=frozenset({"LOCATION", "NRP", "organization"}),
+            text, results, excluded=frozenset({"LOCATION", "NRP", "organization"})
         )
         assert len(filtered) == 1
         assert filtered[0].entity_type == "PERSON"
@@ -327,9 +322,7 @@ class TestBuildFilterPipeline:
 
     def test_exclusion_filter_is_first(self) -> None:
         """The exclusion filter must run before all other filters."""
-        pipeline = build_filter_pipeline(
-            excluded_entities=frozenset({"LOCATION"}),
-        )
+        pipeline = build_filter_pipeline(excluded_entities=frozenset({"LOCATION"}))
         text = "Zurich is nice"
         results: list[Any] = [FakeResult("LOCATION", 0, 6, 0.9)]
         # The first filter should drop excluded entities

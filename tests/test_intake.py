@@ -115,10 +115,7 @@ class TestMatchDossiersToCandidates:
     @staticmethod
     def _make_candidate(name: str, year: str, rnd: str) -> CandidateRecord:
         return CandidateRecord(
-            source_file="test.xlsx",
-            academic_year=year,
-            admission_round=rnd,
-            name=name,
+            source_file="test.xlsx", academic_year=year, admission_round=rnd, name=name
         )
 
     @staticmethod

@@ -18,10 +18,7 @@ from agentic_admission.models.dossier import Dossier
 # corresponding dossier folders.  Only "{YYYY}-{YY}" years map to semesters.
 _YEAR_RANGE_PATTERN = re.compile(r"^\d{4}-\d{2}$")
 
-_ROUND_TO_SEASON: dict[str, str] = {
-    "round1": "fall",
-    "round2": "spring",
-}
+_ROUND_TO_SEASON: dict[str, str] = {"round1": "fall", "round2": "spring"}
 
 
 def semester_from_record(academic_year: str, admission_round: str) -> str | None:
@@ -60,22 +57,9 @@ def _strip_accents(text: str) -> str:
 
 
 # Lowercase particles that are typically part of compound last names
-_PARTICLES: frozenset[str] = frozenset({
-    "von",
-    "van",
-    "de",
-    "del",
-    "der",
-    "di",
-    "el",
-    "al",
-    "ben",
-    "bin",
-    "da",
-    "dos",
-    "las",
-    "los",
-})
+_PARTICLES: frozenset[str] = frozenset(
+    {"von", "van", "de", "del", "der", "di", "el", "al", "ben", "bin", "da", "dos", "las", "los"}
+)
 
 
 def name_to_folder_key(name: str) -> str:
@@ -172,8 +156,7 @@ MatchResult = tuple[list[Dossier], list[Dossier], list[CandidateRecord]]
 
 
 def match_dossiers_to_candidates(
-    dossiers: list[Dossier],
-    candidates: list[CandidateRecord],
+    dossiers: list[Dossier], candidates: list[CandidateRecord]
 ) -> MatchResult:
     """Match dossier folders to candidate records by name and semester.
 
@@ -228,9 +211,7 @@ def match_dossiers_to_candidates(
             logger.debug("No dossier for {} in {}", folder_keys, semester)
             unmatched_candidates.append(candidate)
 
-    unmatched_dossiers = [
-        d for d in dossiers if (d.semester, d.folder_name) not in matched_keys
-    ]
+    unmatched_dossiers = [d for d in dossiers if (d.semester, d.folder_name) not in matched_keys]
 
     logger.info(
         "Matching: {} matched, {} unmatched dossiers, {} unmatched candidates",

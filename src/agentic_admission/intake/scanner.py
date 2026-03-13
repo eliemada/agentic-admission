@@ -14,11 +14,7 @@ from agentic_admission.models.document import (
 from agentic_admission.models.dossier import Dossier
 
 
-def _scan_candidate_folder(
-    candidate_dir: Path,
-    semester: str,
-    dossier_root: Path,
-) -> Dossier:
+def _scan_candidate_folder(candidate_dir: Path, semester: str, dossier_root: Path) -> Dossier:
     """Build a ``Dossier`` from a single candidate folder.
 
     Parameters
@@ -46,15 +42,9 @@ def _scan_candidate_folder(
         doc_type = classify_document(entry.name)
         number = parse_document_number(entry.name)
 
-        documents.append(
-            DossierDocument(path=relative, document_type=doc_type, number=number),
-        )
+        documents.append(DossierDocument(path=relative, document_type=doc_type, number=number))
 
-    return Dossier(
-        folder_name=candidate_dir.name,
-        semester=semester,
-        documents=documents,
-    )
+    return Dossier(folder_name=candidate_dir.name, semester=semester, documents=documents)
 
 
 def scan_dossier_tree(root: Path) -> list[Dossier]:
@@ -95,11 +85,7 @@ def scan_dossier_tree(root: Path) -> list[Dossier]:
             dossier = _scan_candidate_folder(cand_dir, semester, root)
             dossiers.append(dossier)
 
-        logger.debug(
-            "Scanned {}: {} candidates",
-            semester,
-            len(candidate_dirs),
-        )
+        logger.debug("Scanned {}: {} candidates", semester, len(candidate_dirs))
 
     logger.info("Scanned {} dossiers from {}", len(dossiers), root)
     return dossiers
