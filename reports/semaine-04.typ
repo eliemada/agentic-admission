@@ -174,6 +174,10 @@ Texte anonymisé
 #tache("Tests unitaires (135 tests, couverture ≥ 40%)", statut: "fait")
 #tache("Validation sur 2 candidats (6 documents)", statut: "fait")
 #tache("Documentation logique d'anonymisation", statut: "fait")
+#tache("Modèles Dossier, DocumentType, AgentEvaluation", statut: "fait")
+#tache("Scanner + matcher dossiers ↔ Parquet (89,6 %)", statut: "fait")
+#tache("Adaptateur intake ZIP/TAR/dir + path traversal", statut: "fait")
+#tache("Triage reject-first (CV, motivation, relevé)", statut: "fait")
 #tache("Conversion PDF → Markdown à grande échelle", statut: "bloqué")
 #tache("Anonymisation corpus complet", statut: "à faire")
 #tache("Pipeline LLM : évaluation vs décision comité", statut: "à faire")
@@ -204,6 +208,20 @@ données en amont du pipeline LLM.
 Les ~30 non-appariés sont des cas limites (apostrophes, particules
 multi-mots). 41 tests, lint propre.
 
+== Adaptateur d'intake et triage
+
+- `adapter.py` --- détection automatique du format (ZIP, TAR/GZ,
+  répertoire, répertoire de ZIPs) via magic bytes, extraction vers
+  un répertoire de staging avec protection path traversal
+- `validator.py` --- pré-screening reject-first : dossier incomplet
+  (CV, lettre de motivation ou relevé de notes manquant)
+  → `auto_reject=True`. Le panel d'agents peut outrepasser si le
+  reste du dossier est exceptionnel
+- Trois verdicts : `COMPLETE`, `INCOMPLETE`, `EMPTY` + score de
+  complétude (0.0--1.0)
+- CLI : `uv run poe ingest <source>`
+- 67 tests au total, lint propre
+
 // -- Plan semaine prochaine -------------------------------------------------
 
 = Plan pour la semaine prochaine
@@ -213,8 +231,7 @@ multi-mots). 41 tests, lint propre.
 - Anonymisation à grande échelle et validation sur 50--100 dossiers
 
 == Priorité moyenne
-- Adaptateur d'intake ZIP/TAR : accepter un archive unique ou un
-  répertoire de 200 dossiers, détection automatique du format,
-  validation de la structure
 - Architecture des agents : prompts et rôles (strict, holistic,
   technical, moderator) basés sur les guidelines d'admission MTE
+- Orchestrateur : fan-out vers 3 évaluateurs + modérateur,
+  concurrence configurable pour batch de 200 dossiers
