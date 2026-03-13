@@ -164,24 +164,6 @@ Texte anonymisé
 - *Docling instable sur certains scans* : crash sur une lettre de
   recommandation scannée (bug PIL/image de taille nulle)
 
-// -- Fichiers modifiés -----------------------------------------------------
-
-= Fichiers modifiés
-
-#callout(titre: "Résumé des changements", icon: "◆", couleur: rgb("#8B5CF6"))[
-  *8 fichiers modifiés, 2 fichiers créés, 135 tests (27 nouveaux)* \
-  \
-  `config.py` --- ajout `anonymizer_excluded_entities` (frozenset + validateur) \
-  `allow_lists.py` --- ajout `LANGUAGES` (75 langues), `ALL_CATEGORIES` 5→6 \
-  `post_filters.py` --- ajout `filter_excluded_entities()`, pipeline 5→6 filtres \
-  `dob_operator.py` --- *nouveau* : `DobYearOperator` (Presidio Operator) \
-  `presidio_pipeline.py` --- câblage opérateur DOB, `_DOB_ENTITY_TYPES` \
-  `__init__.py` --- docstring mis à jour \
-  `.env.example` --- ajout `ANONYMIZER_EXCLUDED_ENTITIES` \
-  Tests : `test_allow_lists.py`, `test_post_filters.py`,
-  `test_presidio_pipeline.py` mis à jour + `test_dob_operator.py` nouveau
-]
-
 // -- Tâches -----------------------------------------------------------------
 
 = Suivi des tâches
@@ -192,9 +174,53 @@ Texte anonymisé
 #tache("Tests unitaires (135 tests, couverture ≥ 40%)", statut: "fait")
 #tache("Validation sur 2 candidats (6 documents)", statut: "fait")
 #tache("Documentation logique d'anonymisation", statut: "fait")
+#tache("Modèles Dossier, DocumentType, AgentEvaluation", statut: "fait")
+#tache("Scanner + matcher dossiers ↔ Parquet (89,6 %)", statut: "fait")
+#tache("Adaptateur intake ZIP/TAR/dir + path traversal", statut: "fait")
+#tache("Triage reject-first (CV, motivation, relevé)", statut: "fait")
 #tache("Conversion PDF → Markdown à grande échelle", statut: "bloqué")
 #tache("Anonymisation corpus complet", statut: "à faire")
 #tache("Pipeline LLM : évaluation vs décision comité", statut: "à faire")
+
+== Modèle de données Dossier et matching Parquet
+
+SCITAS étant indisponible, le travail s'est concentré sur la couche de
+données en amont du pipeline LLM.
+
+*Modèles créés* (`src/agentic_admission/models/`) :
+- `DocumentType` --- 11 types de documents (CV, relevé de notes, lettre de
+  motivation, recommandation, etc.), classifiés automatiquement à partir
+  des noms de dossiers numérotés
+- `Dossier` --- relie un dossier candidat (dossier physique) à son
+  `CandidateRecord` Parquet, avec un `ProcessingStage`
+  (RAW → NORMALIZED → EXTRACTED → ANONYMIZED → EVALUATED)
+- `AgentEvaluation` / `PanelVerdict` --- modèles pour le panel
+  multi-agent (strict, holistic, technical, moderator)
+
+*Module intake* (`src/agentic_admission/intake/`) :
+- `scanner.py` --- parcourt l'arborescence `{semestre}/{candidat}/`
+  et construit des objets `Dossier` avec documents classifiés
+- `matcher.py` --- apparie dossiers ↔ Parquet par semestre
+  (`round1`→`fall`, `round2`→`spring`) et nom (génération de clés
+  multiples pour noms composés, particules, accents)
+
+*Résultat* : *1 021 / 1 139 dossiers appariés (89,6 %)*.
+Les ~30 non-appariés sont des cas limites (apostrophes, particules
+multi-mots). 41 tests, lint propre.
+
+== Adaptateur d'intake et triage
+
+- `adapter.py` --- détection automatique du format (ZIP, TAR/GZ,
+  répertoire, répertoire de ZIPs) via magic bytes, extraction vers
+  un répertoire de staging avec protection path traversal
+- `validator.py` --- pré-screening reject-first : dossier incomplet
+  (CV, lettre de motivation ou relevé de notes manquant)
+  → `auto_reject=True`. Le panel d'agents peut outrepasser si le
+  reste du dossier est exceptionnel
+- Trois verdicts : `COMPLETE`, `INCOMPLETE`, `EMPTY` + score de
+  complétude (0.0--1.0)
+- CLI : `uv run poe ingest <source>`
+- 67 tests au total, lint propre
 
 // -- Plan semaine prochaine -------------------------------------------------
 
@@ -203,11 +229,9 @@ Texte anonymisé
 == Priorité haute
 - Conversion PDF → Markdown sur SCITAS (GPU) pour les ~13 600 fichiers
 - Anonymisation à grande échelle et validation sur 50--100 dossiers
-- Corriger les faux positifs résiduels (`AGE` sur « 5 years »,
-  `DATE_TIME` sur « fourth-year »)
 
 == Priorité moyenne
-- Lier les dossiers anonymisés aux données structurées Parquet
-  (décisions du comité, GPA, université)
-- Premiers tests d'évaluation LLM : guidelines en contexte + dossier,
-  comparer décision modèle vs comité
+- Architecture des agents : prompts et rôles (strict, holistic,
+  technical, moderator) basés sur les guidelines d'admission MTE
+- Orchestrateur : fan-out vers 3 évaluateurs + modérateur,
+  concurrence configurable pour batch de 200 dossiers
