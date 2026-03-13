@@ -164,24 +164,6 @@ Texte anonymisé
 - *Docling instable sur certains scans* : crash sur une lettre de
   recommandation scannée (bug PIL/image de taille nulle)
 
-// -- Fichiers modifiés -----------------------------------------------------
-
-= Fichiers modifiés
-
-#callout(titre: "Résumé des changements", icon: "◆", couleur: rgb("#8B5CF6"))[
-  *8 fichiers modifiés, 2 fichiers créés, 135 tests (27 nouveaux)* \
-  \
-  `config.py` --- ajout `anonymizer_excluded_entities` (frozenset + validateur) \
-  `allow_lists.py` --- ajout `LANGUAGES` (75 langues), `ALL_CATEGORIES` 5→6 \
-  `post_filters.py` --- ajout `filter_excluded_entities()`, pipeline 5→6 filtres \
-  `dob_operator.py` --- *nouveau* : `DobYearOperator` (Presidio Operator) \
-  `presidio_pipeline.py` --- câblage opérateur DOB, `_DOB_ENTITY_TYPES` \
-  `__init__.py` --- docstring mis à jour \
-  `.env.example` --- ajout `ANONYMIZER_EXCLUDED_ENTITIES` \
-  Tests : `test_allow_lists.py`, `test_post_filters.py`,
-  `test_presidio_pipeline.py` mis à jour + `test_dob_operator.py` nouveau
-]
-
 // -- Tâches -----------------------------------------------------------------
 
 = Suivi des tâches
@@ -196,6 +178,32 @@ Texte anonymisé
 #tache("Anonymisation corpus complet", statut: "à faire")
 #tache("Pipeline LLM : évaluation vs décision comité", statut: "à faire")
 
+== Modèle de données Dossier et matching Parquet
+
+SCITAS étant indisponible, le travail s'est concentré sur la couche de
+données en amont du pipeline LLM.
+
+*Modèles créés* (`src/agentic_admission/models/`) :
+- `DocumentType` --- 11 types de documents (CV, relevé de notes, lettre de
+  motivation, recommandation, etc.), classifiés automatiquement à partir
+  des noms de dossiers numérotés
+- `Dossier` --- relie un dossier candidat (dossier physique) à son
+  `CandidateRecord` Parquet, avec un `ProcessingStage`
+  (RAW → NORMALIZED → EXTRACTED → ANONYMIZED → EVALUATED)
+- `AgentEvaluation` / `PanelVerdict` --- modèles pour le panel
+  multi-agent (strict, holistic, technical, moderator)
+
+*Module intake* (`src/agentic_admission/intake/`) :
+- `scanner.py` --- parcourt l'arborescence `{semestre}/{candidat}/`
+  et construit des objets `Dossier` avec documents classifiés
+- `matcher.py` --- apparie dossiers ↔ Parquet par semestre
+  (`round1`→`fall`, `round2`→`spring`) et nom (génération de clés
+  multiples pour noms composés, particules, accents)
+
+*Résultat* : *1 021 / 1 139 dossiers appariés (89,6 %)*.
+Les ~30 non-appariés sont des cas limites (apostrophes, particules
+multi-mots). 41 tests, lint propre.
+
 // -- Plan semaine prochaine -------------------------------------------------
 
 = Plan pour la semaine prochaine
@@ -203,11 +211,10 @@ Texte anonymisé
 == Priorité haute
 - Conversion PDF → Markdown sur SCITAS (GPU) pour les ~13 600 fichiers
 - Anonymisation à grande échelle et validation sur 50--100 dossiers
-- Corriger les faux positifs résiduels (`AGE` sur « 5 years »,
-  `DATE_TIME` sur « fourth-year »)
 
 == Priorité moyenne
-- Lier les dossiers anonymisés aux données structurées Parquet
-  (décisions du comité, GPA, université)
-- Premiers tests d'évaluation LLM : guidelines en contexte + dossier,
-  comparer décision modèle vs comité
+- Adaptateur d'intake ZIP/TAR : accepter un archive unique ou un
+  répertoire de 200 dossiers, détection automatique du format,
+  validation de la structure
+- Architecture des agents : prompts et rôles (strict, holistic,
+  technical, moderator) basés sur les guidelines d'admission MTE
