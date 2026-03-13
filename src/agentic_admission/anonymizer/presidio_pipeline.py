@@ -123,10 +123,7 @@ def build_analyzer() -> Any:
     }
     nlp_engine = NlpEngineProvider(nlp_configuration=nlp_config).create_engine()
 
-    analyzer = AnalyzerEngine(
-        nlp_engine=nlp_engine,
-        supported_languages=["en"],
-    )
+    analyzer = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=["en"])
 
     # Remove default SpacyRecognizer (GLiNER replaces it).
     spacy_recognizer = None
@@ -135,7 +132,7 @@ def build_analyzer() -> Any:
             spacy_recognizer = rec
             break
     if spacy_recognizer is not None:
-        analyzer.registry.remove_recognizer(spacy_recognizer)
+        analyzer.registry.remove_recognizer(spacy_recognizer.name)
 
     # Add GLiNER recognizer.
     try:
@@ -245,15 +242,14 @@ def anonymize_text(
     from agentic_admission.anonymizer.allow_lists import build_allow_list
     from agentic_admission.anonymizer.post_filters import apply_filters, build_filter_pipeline
 
-    threshold = score_threshold if score_threshold is not None else settings.presidio_score_threshold
+    threshold = (
+        score_threshold if score_threshold is not None else settings.presidio_score_threshold
+    )
 
     effective_allow_list = allow_list if allow_list is not None else build_allow_list()
 
     results = analyzer.analyze(
-        text=text,
-        language="en",
-        score_threshold=threshold,
-        allow_list=effective_allow_list,
+        text=text, language="en", score_threshold=threshold, allow_list=effective_allow_list
     )
 
     if not results:
@@ -269,11 +265,7 @@ def anonymize_text(
     entity_types = list({r.entity_type for r in results})
     operators = _build_operators(entity_types)
 
-    anonymized = anonymizer.anonymize(
-        text=text,
-        analyzer_results=results,
-        operators=operators,
-    )
+    anonymized = anonymizer.anonymize(text=text, analyzer_results=results, operators=operators)
 
     counts: dict[str, int] = {}
     for r in results:
@@ -283,10 +275,7 @@ def anonymize_text(
 
 
 def anonymize_file(
-    input_path: Path,
-    output_path: Path,
-    analyzer: Any,
-    anonymizer: Any,
+    input_path: Path, output_path: Path, analyzer: Any, anonymizer: Any
 ) -> dict[str, int]:
     """Read a Markdown file, anonymize it, and write the result.
 
@@ -338,11 +327,7 @@ def _collect_md_files(src: Path) -> list[Path]:
 
 
 def _process_single_file(
-    md_path: Path,
-    out_path: Path,
-    analyzer: Any,
-    anonymizer: Any,
-    report: AnonymizationReport,
+    md_path: Path, out_path: Path, analyzer: Any, anonymizer: Any, report: AnonymizationReport
 ) -> None:
     """Anonymize one file and update *report* in place."""
     try:
@@ -358,12 +343,7 @@ def _process_single_file(
 
 
 def anonymize_dossiers(
-    src: Path,
-    dst: Path,
-    *,
-    dry_run: bool = False,
-    force: bool = False,
-    sample: int | None = None,
+    src: Path, dst: Path, *, dry_run: bool = False, force: bool = False, sample: int | None = None
 ) -> AnonymizationReport:
     """Walk *src*, anonymize each Markdown file, and write to *dst*.
 
@@ -435,7 +415,7 @@ def anonymize_dossiers(
 def main() -> None:
     """Run the PII anonymization pipeline."""
     parser = argparse.ArgumentParser(
-        description="Detect and redact PII from extracted Markdown files.",
+        description="Detect and redact PII from extracted Markdown files."
     )
     parser.add_argument(
         "--input",
@@ -444,26 +424,16 @@ def main() -> None:
         help="Root directory of extracted Markdown files.",
     )
     parser.add_argument(
-        "--output",
-        type=Path,
-        default=_OUTPUT_ROOT,
-        help="Output directory for anonymized files.",
+        "--output", type=Path, default=_OUTPUT_ROOT, help="Output directory for anonymized files."
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Log what would happen without writing anything.",
+        "--dry-run", action="store_true", help="Log what would happen without writing anything."
     )
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Re-anonymize even if output already exists.",
+        "--force", action="store_true", help="Re-anonymize even if output already exists."
     )
     parser.add_argument(
-        "--sample",
-        type=int,
-        default=None,
-        help="Process only this many files (for testing).",
+        "--sample", type=int, default=None, help="Process only this many files (for testing)."
     )
     parser.add_argument(
         "--confidence",
@@ -485,11 +455,7 @@ def main() -> None:
         logger.info("DRY-RUN mode — no files will be written.")
 
     report = anonymize_dossiers(
-        args.input,
-        args.output,
-        dry_run=args.dry_run,
-        force=args.force,
-        sample=args.sample,
+        args.input, args.output, dry_run=args.dry_run, force=args.force, sample=args.sample
     )
 
     logger.info(

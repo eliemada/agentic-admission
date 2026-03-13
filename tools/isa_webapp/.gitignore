@@ -1,0 +1,5 @@
+api/_bin/typst
+__pycache__/
+*.pyc
+.vercel/
+.env

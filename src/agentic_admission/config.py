@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     vlm_base_url : str
         Base URL of the VLM serving endpoint (separate from text LLM).
     presidio_score_threshold : float
-        Minimum confidence for PII detection (0.0–1.0).
+        Minimum confidence for PII detection (0.0-1.0).
     gliner_model : str
         GLiNER model ID for zero-shot NER in Presidio.
     anonymizer_excluded_entities : frozenset[str]
@@ -39,12 +39,9 @@ class Settings(BaseSettings):
     vlm_base_url: str = "http://localhost:8001/v1"
     presidio_score_threshold: float = 0.5
     gliner_model: str = "urchade/gliner_multi_pii-v1"
-    anonymizer_excluded_entities: frozenset[str] = frozenset({
-        "LOCATION",
-        "NRP",
-        "organization",
-        "ORGANIZATION",
-    })
+    anonymizer_excluded_entities: frozenset[str] = frozenset(
+        {"LOCATION", "NRP", "organization", "ORGANIZATION"}
+    )
 
     @field_validator("anonymizer_excluded_entities", mode="before")
     @classmethod

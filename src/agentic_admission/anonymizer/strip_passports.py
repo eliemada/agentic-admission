@@ -79,41 +79,49 @@ def scan_dossiers(root: Path) -> list[dict[str, Any]]:
         semester = semester_dir.name
         candidate_dirs = sorted(d for d in semester_dir.iterdir() if d.is_dir())
         for cand_dir in candidate_dirs:
-            passport_dirs = [d for d in cand_dir.iterdir() if d.is_dir() and _is_passport_dir(d.name)]
+            passport_dirs = [
+                d for d in cand_dir.iterdir() if d.is_dir() and _is_passport_dir(d.name)
+            ]
 
             if passport_dirs:
                 for pdir in passport_dirs:
                     fcount, fsize = _folder_stats(pdir)
-                    rows.append({
+                    rows.append(
+                        {
+                            "semester": semester,
+                            "candidate_folder": cand_dir.name,
+                            "has_passport_id": True,
+                            "passport_file_count": fcount,
+                            "passport_size_kb": round(fsize / 1024, 1),
+                            "passport_dir": str(pdir),
+                        }
+                    )
+            else:
+                rows.append(
+                    {
                         "semester": semester,
                         "candidate_folder": cand_dir.name,
-                        "has_passport_id": True,
-                        "passport_file_count": fcount,
-                        "passport_size_kb": round(fsize / 1024, 1),
-                        "passport_dir": str(pdir),
-                    })
-            else:
-                rows.append({
-                    "semester": semester,
-                    "candidate_folder": cand_dir.name,
-                    "has_passport_id": False,
-                    "passport_file_count": 0,
-                    "passport_size_kb": 0.0,
-                    "passport_dir": "",
-                })
+                        "has_passport_id": False,
+                        "passport_file_count": 0,
+                        "passport_size_kb": 0.0,
+                        "passport_dir": "",
+                    }
+                )
 
     return rows
 
 
 def write_inventory(rows: list[dict[str, Any]], output: Path) -> None:
     """Write inventory rows to a Parquet file."""
-    schema = pa.schema([
-        ("semester", pa.string()),
-        ("candidate_folder", pa.string()),
-        ("has_passport_id", pa.bool_()),
-        ("passport_file_count", pa.int32()),
-        ("passport_size_kb", pa.float64()),
-    ])
+    schema = pa.schema(
+        [
+            ("semester", pa.string()),
+            ("candidate_folder", pa.string()),
+            ("has_passport_id", pa.bool_()),
+            ("passport_file_count", pa.int32()),
+            ("passport_size_kb", pa.float64()),
+        ]
+    )
     columns: dict[str, list[object]] = {
         "semester": [r["semester"] for r in rows],
         "candidate_folder": [r["candidate_folder"] for r in rows],
@@ -158,7 +166,7 @@ def delete_passport_dirs(rows: list[dict[str, Any]]) -> tuple[int, float]:
 def main() -> None:
     """Run the passport stripping pipeline."""
     parser = argparse.ArgumentParser(
-        description="Record passport/ID presence and optionally delete the files.",
+        description="Record passport/ID presence and optionally delete the files."
     )
     parser.add_argument(
         "--delete",
@@ -166,16 +174,10 @@ def main() -> None:
         help="Actually delete passport/ID folders (default is dry-run).",
     )
     parser.add_argument(
-        "--dossier-root",
-        type=Path,
-        default=_DOSSIER_ROOT,
-        help="Root directory of dossier data.",
+        "--dossier-root", type=Path, default=_DOSSIER_ROOT, help="Root directory of dossier data."
     )
     parser.add_argument(
-        "--output",
-        type=Path,
-        default=_OUTPUT_PATH,
-        help="Output parquet file path.",
+        "--output", type=Path, default=_OUTPUT_PATH, help="Output parquet file path."
     )
     args = parser.parse_args()
 

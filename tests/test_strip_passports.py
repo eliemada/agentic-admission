@@ -102,7 +102,7 @@ class TestWriteInventory:
                 "passport_file_count": 2,
                 "passport_size_kb": 150.5,
                 "passport_dir": "/tmp/fake",
-            },
+            }
         ]
         output = tmp_path / "inventory.parquet"
         write_inventory(rows, output)
@@ -135,7 +135,7 @@ class TestDeletePassportDirs:
                 "passport_file_count": 1,
                 "passport_size_kb": 10.0,
                 "passport_dir": str(passport_dir),
-            },
+            }
         ]
 
         deleted, freed_mb = delete_passport_dirs(rows)
@@ -153,7 +153,7 @@ class TestDeletePassportDirs:
                 "passport_file_count": 0,
                 "passport_size_kb": 0.0,
                 "passport_dir": "",
-            },
+            }
         ]
 
         deleted, freed_mb = delete_passport_dirs(rows)

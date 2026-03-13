@@ -72,16 +72,13 @@ def _build_local_converter() -> object:
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.vlm_pipeline import VlmPipeline
 
-    pipeline_options = VlmPipelineOptions(
-        vlm_options=vlm_model_specs.GRANITEDOCLING_TRANSFORMERS,
-    )
+    pipeline_options = VlmPipelineOptions(vlm_options=vlm_model_specs.GRANITEDOCLING_TRANSFORMERS)
     return DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(
-                pipeline_cls=VlmPipeline,
-                pipeline_options=pipeline_options,
-            ),
-        },
+                pipeline_cls=VlmPipeline, pipeline_options=pipeline_options
+            )
+        }
     )
 
 
@@ -99,26 +96,23 @@ def _build_api_converter() -> object:
     from docling.datamodel.pipeline_options import ApiVlmOptions, ResponseFormat, VlmPipelineOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.pipeline.vlm_pipeline import VlmPipeline
+    from pydantic import AnyUrl
 
     url = settings.vlm_base_url.rstrip("/") + "/chat/completions"
     vlm_options = ApiVlmOptions(
-        url=url,
+        url=AnyUrl(url),
         params={"model": settings.vlm_model_name, "max_tokens": 4096},
         prompt=_PROMPT_MARKDOWN,
         response_format=ResponseFormat.MARKDOWN,
         timeout=300.0,
     )
-    pipeline_options = VlmPipelineOptions(
-        vlm_options=vlm_options,
-        enable_remote_services=True,
-    )
+    pipeline_options = VlmPipelineOptions(vlm_options=vlm_options, enable_remote_services=True)
     return DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(
-                pipeline_cls=VlmPipeline,
-                pipeline_options=pipeline_options,
-            ),
-        },
+                pipeline_cls=VlmPipeline, pipeline_options=pipeline_options
+            )
+        }
     )
 
 
@@ -134,11 +128,7 @@ def _should_skip(pdf_path: Path, md_path: Path) -> bool:
     return md_path.stat().st_mtime >= pdf_path.stat().st_mtime
 
 
-def convert_pdf_to_markdown(
-    pdf_path: Path,
-    output_path: Path,
-    converter: object,
-) -> bool:
+def convert_pdf_to_markdown(pdf_path: Path, output_path: Path, converter: object) -> bool:
     """Convert a single PDF to Markdown using the given Docling converter.
 
     Parameters
@@ -168,12 +158,7 @@ def convert_pdf_to_markdown(
 
 
 def extract_texts(
-    src: Path,
-    dst: Path,
-    *,
-    backend: str = "local",
-    dry_run: bool = False,
-    force: bool = False,
+    src: Path, dst: Path, *, backend: str = "local", dry_run: bool = False, force: bool = False
 ) -> ExtractionReport:
     """Walk *src*, convert each PDF to Markdown, and write to *dst*.
 
@@ -249,20 +234,12 @@ def extract_texts(
 
 def main() -> None:
     """Run the text extraction pipeline."""
-    parser = argparse.ArgumentParser(
-        description="Convert dossier PDFs to Markdown using Docling.",
+    parser = argparse.ArgumentParser(description="Convert dossier PDFs to Markdown using Docling.")
+    parser.add_argument(
+        "--input", type=Path, default=_INPUT_ROOT, help="Root directory of normalized dossier PDFs."
     )
     parser.add_argument(
-        "--input",
-        type=Path,
-        default=_INPUT_ROOT,
-        help="Root directory of normalized dossier PDFs.",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=_OUTPUT_ROOT,
-        help="Output directory for Markdown files.",
+        "--output", type=Path, default=_OUTPUT_ROOT, help="Output directory for Markdown files."
     )
     parser.add_argument(
         "--backend",
@@ -271,14 +248,10 @@ def main() -> None:
         help="VLM backend: 'local' (Granite-Docling-258M) or 'api' (remote vLLM).",
     )
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Log what would happen without writing anything.",
+        "--dry-run", action="store_true", help="Log what would happen without writing anything."
     )
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Re-extract even if output already exists.",
+        "--force", action="store_true", help="Re-extract even if output already exists."
     )
     args = parser.parse_args()
 
@@ -291,11 +264,7 @@ def main() -> None:
         logger.info("DRY-RUN mode — no files will be written.")
 
     report = extract_texts(
-        args.input,
-        args.output,
-        backend=args.backend,
-        dry_run=args.dry_run,
-        force=args.force,
+        args.input, args.output, backend=args.backend, dry_run=args.dry_run, force=args.force
     )
 
     logger.info(

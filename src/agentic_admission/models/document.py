@@ -31,14 +31,23 @@ class DocumentType(Enum):
 # Ordered rules: first match wins.  Patterns are matched case-insensitively
 # against the folder/file name (the numbered prefix line).
 _CLASSIFICATION_RULES: list[tuple[re.Pattern[str], DocumentType]] = [
-    (re.compile(r"synth(?:e|è)se de la candidature", re.IGNORECASE), DocumentType.APPLICATION_SUMMARY),
+    (
+        re.compile(r"synth(?:e|è)se de la candidature", re.IGNORECASE),
+        DocumentType.APPLICATION_SUMMARY,
+    ),
     (re.compile(r"lettre de motivation", re.IGNORECASE), DocumentType.MOTIVATION_LETTER),
-    (re.compile(r"referent.*lettre de recommandation", re.IGNORECASE), DocumentType.RECOMMENDATION_LETTER),
+    (
+        re.compile(r"referent.*lettre de recommandation", re.IGNORECASE),
+        DocumentType.RECOMMENDATION_LETTER,
+    ),
     (re.compile(r"referent.*synth(?:e|è)se", re.IGNORECASE), DocumentType.REFERENT_SUMMARY),
     (re.compile(r"relev(?:e|é) de notes", re.IGNORECASE), DocumentType.TRANSCRIPT),
     (re.compile(r"dipl(?:o|ô)me", re.IGNORECASE), DocumentType.DIPLOMA),
     (re.compile(r"\bCV[\b_]|^CV$", re.IGNORECASE), DocumentType.CV),
-    (re.compile(r"certificat linguistique|toefl", re.IGNORECASE), DocumentType.LANGUAGE_CERTIFICATE),
+    (
+        re.compile(r"certificat linguistique|toefl", re.IGNORECASE),
+        DocumentType.LANGUAGE_CERTIFICATE,
+    ),
     (re.compile(r"r(?:e|é)sultats?\s*GRE", re.IGNORECASE), DocumentType.GRE_RESULTS),
     (re.compile(r"autres documents", re.IGNORECASE), DocumentType.OTHER),
 ]

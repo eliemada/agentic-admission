@@ -71,7 +71,9 @@ class TestDossierDocument:
 
     def test_create_document(self) -> None:
         doc = DossierDocument(
-            path=PurePosixPath("2024-25-fall/akiki/2 - Cand. Master Lettre de motivation_F942803165"),
+            path=PurePosixPath(
+                "2024-25-fall/akiki/2 - Cand. Master Lettre de motivation_F942803165"
+            ),
             document_type=DocumentType.MOTIVATION_LETTER,
             number=2,
         )
@@ -80,9 +82,7 @@ class TestDossierDocument:
 
     def test_immutable(self) -> None:
         doc = DossierDocument(
-            path=PurePosixPath("some/path"),
-            document_type=DocumentType.CV,
-            number=11,
+            path=PurePosixPath("some/path"), document_type=DocumentType.CV, number=11
         )
         # Pydantic frozen model — assignment should raise
         try:
@@ -101,11 +101,7 @@ class TestDossier:
     """Tests for the Dossier model."""
 
     def test_create_minimal(self) -> None:
-        dossier = Dossier(
-            folder_name="akiki",
-            semester="2024-25-fall",
-            documents=[],
-        )
+        dossier = Dossier(folder_name="akiki", semester="2024-25-fall", documents=[])
         assert dossier.folder_name == "akiki"
         assert dossier.semester == "2024-25-fall"
         assert dossier.candidate is None
@@ -113,63 +109,31 @@ class TestDossier:
 
     def test_with_documents(self) -> None:
         docs = [
+            DossierDocument(path=PurePosixPath("a"), document_type=DocumentType.CV, number=11),
             DossierDocument(
-                path=PurePosixPath("a"),
-                document_type=DocumentType.CV,
-                number=11,
-            ),
-            DossierDocument(
-                path=PurePosixPath("b"),
-                document_type=DocumentType.MOTIVATION_LETTER,
-                number=2,
+                path=PurePosixPath("b"), document_type=DocumentType.MOTIVATION_LETTER, number=2
             ),
         ]
-        dossier = Dossier(
-            folder_name="akiki",
-            semester="2024-25-fall",
-            documents=docs,
-        )
+        dossier = Dossier(folder_name="akiki", semester="2024-25-fall", documents=docs)
         assert len(dossier.documents) == 2
 
     def test_has_document_type(self) -> None:
-        docs = [
-            DossierDocument(
-                path=PurePosixPath("a"),
-                document_type=DocumentType.CV,
-                number=11,
-            ),
-        ]
-        dossier = Dossier(
-            folder_name="akiki",
-            semester="2024-25-fall",
-            documents=docs,
-        )
+        docs = [DossierDocument(path=PurePosixPath("a"), document_type=DocumentType.CV, number=11)]
+        dossier = Dossier(folder_name="akiki", semester="2024-25-fall", documents=docs)
         assert dossier.has_document(DocumentType.CV)
         assert not dossier.has_document(DocumentType.MOTIVATION_LETTER)
 
     def test_documents_by_type(self) -> None:
         docs = [
             DossierDocument(
-                path=PurePosixPath("a"),
-                document_type=DocumentType.RECOMMENDATION_LETTER,
-                number=3,
+                path=PurePosixPath("a"), document_type=DocumentType.RECOMMENDATION_LETTER, number=3
             ),
             DossierDocument(
-                path=PurePosixPath("b"),
-                document_type=DocumentType.RECOMMENDATION_LETTER,
-                number=5,
+                path=PurePosixPath("b"), document_type=DocumentType.RECOMMENDATION_LETTER, number=5
             ),
-            DossierDocument(
-                path=PurePosixPath("c"),
-                document_type=DocumentType.CV,
-                number=11,
-            ),
+            DossierDocument(path=PurePosixPath("c"), document_type=DocumentType.CV, number=11),
         ]
-        dossier = Dossier(
-            folder_name="akiki",
-            semester="2024-25-fall",
-            documents=docs,
-        )
+        dossier = Dossier(folder_name="akiki", semester="2024-25-fall", documents=docs)
         recs = dossier.documents_by_type(DocumentType.RECOMMENDATION_LETTER)
         assert len(recs) == 2
 
