@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from agentic_admission.models.evaluation import (
     AgentRole,
     AgentScorecard,
@@ -49,6 +52,40 @@ class TestAgentScorecard:
             msg = "AgentScorecard should be frozen"
             raise AssertionError(msg)
 
+    def test_score_out_of_range_raises(self) -> None:
+        with pytest.raises(ValidationError, match="must be 1-10"):
+            AgentScorecard(
+                role=AgentRole.ACADEMIC,
+                scores={"academic_strength": 0},
+                justifications={"academic_strength": "Too low."},
+            )
+
+    def test_score_above_range_raises(self) -> None:
+        with pytest.raises(ValidationError, match="must be 1-10"):
+            AgentScorecard(
+                role=AgentRole.ACADEMIC,
+                scores={"academic_strength": 11},
+                justifications={"academic_strength": "Too high."},
+            )
+
+    def test_scores_dict_is_immutable(self) -> None:
+        card = AgentScorecard(
+            role=AgentRole.ACADEMIC,
+            scores={"academic_strength": 8},
+            justifications={"academic_strength": "Good."},
+        )
+        with pytest.raises(TypeError):
+            card.scores["academic_strength"] = 5  # type: ignore[index]
+
+    def test_justifications_dict_is_immutable(self) -> None:
+        card = AgentScorecard(
+            role=AgentRole.ACADEMIC,
+            scores={"academic_strength": 8},
+            justifications={"academic_strength": "Good."},
+        )
+        with pytest.raises(TypeError):
+            card.justifications["academic_strength"] = "Changed."  # type: ignore[index]
+
 
 class TestConflict:
     def test_conflict_fields(self) -> None:
@@ -95,3 +132,40 @@ class TestPanelVerdict:
         )
         assert verdict.decision == Decision.ACCEPT
         assert len(verdict.final_scores) == 8
+
+    def test_verdict_final_scores_validated(self) -> None:
+        with pytest.raises(ValidationError, match="must be 1-10"):
+            PanelVerdict(
+                candidate_id="2024-25_round1_42",
+                scorecards=(),
+                debates=(),
+                final_scores={"academic_strength": 0},
+                composite_score=5.0,
+                decision=Decision.REJECT,
+                justification="Score out of range.",
+            )
+
+    def test_verdict_composite_score_range(self) -> None:
+        with pytest.raises(ValidationError, match="composite_score must be 1\\.0-10\\.0"):
+            PanelVerdict(
+                candidate_id="2024-25_round1_42",
+                scorecards=(),
+                debates=(),
+                final_scores={"academic_strength": 5},
+                composite_score=0.5,
+                decision=Decision.REJECT,
+                justification="Composite out of range.",
+            )
+
+    def test_verdict_final_scores_immutable(self) -> None:
+        verdict = PanelVerdict(
+            candidate_id="2024-25_round1_42",
+            scorecards=(),
+            debates=(),
+            final_scores={"academic_strength": 8},
+            composite_score=8.0,
+            decision=Decision.ACCEPT,
+            justification="Strong.",
+        )
+        with pytest.raises(TypeError):
+            verdict.final_scores["academic_strength"] = 5  # type: ignore[index]

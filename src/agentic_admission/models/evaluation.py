@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import types
 from enum import Enum
+from typing import Self
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+
+_MIN_SCORE: int = 1
+_MAX_SCORE: int = 10
+_MIN_COMPOSITE: float = 1.0
+_MAX_COMPOSITE: float = 10.0
 
 
 class AgentRole(Enum):
@@ -41,6 +48,19 @@ class AgentScorecard(BaseModel, frozen=True):
     role: AgentRole
     scores: dict[str, int]
     justifications: dict[str, str]
+
+    @model_validator(mode="after")
+    def _validate_and_freeze(self) -> Self:
+        """Enforce 1-10 score range and freeze dict fields."""
+        for dim, val in self.scores.items():
+            if not (_MIN_SCORE <= val <= _MAX_SCORE):
+                msg = f"Score for '{dim}' must be 1-10, got {val}"
+                raise ValueError(msg)
+        object.__setattr__(self, "scores", types.MappingProxyType(dict(self.scores)))
+        object.__setattr__(
+            self, "justifications", types.MappingProxyType(dict(self.justifications))
+        )
+        return self
 
 
 class Conflict(BaseModel, frozen=True):
@@ -125,3 +145,16 @@ class PanelVerdict(BaseModel, frozen=True):
     composite_score: float
     decision: Decision
     justification: str
+
+    @model_validator(mode="after")
+    def _validate_and_freeze(self) -> Self:
+        """Enforce 1-10 score range on final_scores/composite and freeze dict."""
+        for dim, val in self.final_scores.items():
+            if not (_MIN_SCORE <= val <= _MAX_SCORE):
+                msg = f"Score for '{dim}' must be 1-10, got {val}"
+                raise ValueError(msg)
+        if not (_MIN_COMPOSITE <= self.composite_score <= _MAX_COMPOSITE):
+            msg = f"composite_score must be 1.0-10.0, got {self.composite_score}"
+            raise ValueError(msg)
+        object.__setattr__(self, "final_scores", types.MappingProxyType(dict(self.final_scores)))
+        return self
