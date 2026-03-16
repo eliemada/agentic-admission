@@ -176,3 +176,28 @@ class TestComplete:
                 model="test-model",
                 base_url="http://localhost:8000/v1",
             )
+
+    async def test_complete_uses_provided_client(self, mocker: MockerFixture):
+        """When a client is provided, no new httpx.AsyncClient is created."""
+        body = json.dumps({"answer": "yes", "score": 9})
+        response_json = {"choices": [{"message": {"content": body}}]}
+        mock_response = mocker.Mock()
+        mock_response.json.return_value = response_json
+        mock_response.raise_for_status = mocker.Mock()
+
+        provided_client = mocker.AsyncMock()
+        provided_client.post.return_value = mock_response
+
+        mock_constructor = mocker.patch("httpx.AsyncClient")
+
+        messages = [ChatMessage(role="user", content="test")]
+        result = await complete(
+            messages=messages,
+            response_model=DummyOutput,
+            model="test",
+            base_url="http://test",
+            client=provided_client,
+        )
+        assert isinstance(result, DummyOutput)
+        provided_client.post.assert_called_once()
+        mock_constructor.assert_not_called()

@@ -65,7 +65,9 @@ def _is_retryable(exc: BaseException) -> bool:
     wait=wait_exponential(multiplier=1, min=1, max=30),
     reraise=False,
 )
-async def _post_with_retry(*, base_url: str, payload: dict) -> httpx.Response:
+async def _post_with_retry(
+    *, base_url: str, payload: dict, client: httpx.AsyncClient | None = None
+) -> httpx.Response:
     """Send a POST request to the LLM endpoint with automatic retries.
 
     Parameters
@@ -74,6 +76,9 @@ async def _post_with_retry(*, base_url: str, payload: dict) -> httpx.Response:
         Base URL of the vLLM endpoint.
     payload
         JSON payload to send.
+    client
+        Optional shared ``httpx.AsyncClient``.  When provided the caller owns
+        the client lifetime and no new client is created.
 
     Returns
     -------
@@ -85,8 +90,12 @@ async def _post_with_retry(*, base_url: str, payload: dict) -> httpx.Response:
     LLMConnectionError
         When all retry attempts are exhausted.
     """
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    if client is not None:
         response = await client.post(f"{base_url}/chat/completions", json=payload)
+        response.raise_for_status()
+        return response
+    async with httpx.AsyncClient(timeout=120.0) as new_client:
+        response = await new_client.post(f"{base_url}/chat/completions", json=payload)
         response.raise_for_status()
     return response
 
@@ -97,6 +106,7 @@ async def complete[T: BaseModel](
     response_model: type[T],
     model: str,
     base_url: str,
+    client: httpx.AsyncClient | None = None,
     temperature: float = 0.1,
     max_tokens: int = 2048,
 ) -> T:
@@ -112,6 +122,9 @@ async def complete[T: BaseModel](
         Model identifier (e.g. ``"Qwen/Qwen2.5-72B-Instruct"``).
     base_url
         Base URL of the vLLM endpoint (e.g. ``"http://localhost:8000/v1"``).
+    client
+        Optional shared ``httpx.AsyncClient``.  When provided the caller owns
+        the client lifetime and no new client is created per request.
     temperature
         Sampling temperature.
     max_tokens
@@ -144,7 +157,7 @@ async def complete[T: BaseModel](
     logger.debug("LLM request to {}: model={}", base_url, model)
 
     try:
-        response = await _post_with_retry(base_url=base_url, payload=payload)
+        response = await _post_with_retry(base_url=base_url, payload=payload, client=client)
     except RetryError as exc:
         cause = exc.last_attempt.exception()
         msg = f"LLM request failed after retries: {cause}"

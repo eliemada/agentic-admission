@@ -87,7 +87,13 @@ def _mock_agents_no_conflicts(mocker: MockerFixture) -> None:
     )
 
     async def _fake_synthesize(
-        *, candidate_id: str, scorecards: Any, debates: Any, model: str, base_url: str
+        *,
+        candidate_id: str,
+        scorecards: Any,
+        debates: Any,
+        model: str,
+        base_url: str,
+        **kwargs: Any,
     ) -> PanelVerdict:
         return PanelVerdict(
             candidate_id=candidate_id,
@@ -147,7 +153,13 @@ def _mock_agents_with_conflicts(mocker: MockerFixture) -> None:
     )
 
     async def _fake_synthesize(
-        *, candidate_id: str, scorecards: Any, debates: Any, model: str, base_url: str
+        *,
+        candidate_id: str,
+        scorecards: Any,
+        debates: Any,
+        model: str,
+        base_url: str,
+        **kwargs: Any,
     ) -> PanelVerdict:
         return PanelVerdict(
             candidate_id=candidate_id,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from loguru import logger
 from pydantic import BaseModel
 
@@ -15,6 +17,9 @@ from agentic_admission.models.evaluation import (
     DebateTranscript,
     PanelVerdict,
 )
+
+if TYPE_CHECKING:
+    import httpx
 
 _MAX_DEBATE_ROUNDS = 2
 
@@ -54,8 +59,30 @@ def _format_scorecards(scorecards: tuple[AgentScorecard, ...]) -> str:
     return "\n\n".join(sections)
 
 
+def _format_debate_entries(entries: tuple[DebateEntry, ...]) -> str:
+    """Render debate entries as readable text.
+
+    Parameters
+    ----------
+    entries
+        Ordered debate entries to format.
+
+    Returns
+    -------
+    str
+        Newline-joined formatted entries, or ``"(none yet)"`` if empty.
+    """
+    if not entries:
+        return "(none yet)"
+    return "\n".join(f"[{e.role.value}, Round {e.round_number}]: {e.argument}" for e in entries)
+
+
 async def detect_disagreements(
-    *, scorecards: tuple[AgentScorecard, ...], model: str, base_url: str
+    *,
+    scorecards: tuple[AgentScorecard, ...],
+    model: str,
+    base_url: str,
+    client: httpx.AsyncClient | None = None,
 ) -> tuple[Conflict, ...]:
     """Have the Chair identify semantic conflicts across specialist scorecards.
 
@@ -67,6 +94,8 @@ async def detect_disagreements(
         LLM model identifier.
     base_url
         vLLM endpoint base URL.
+    client
+        Optional shared ``httpx.AsyncClient``.
 
     Returns
     -------
@@ -86,14 +115,23 @@ async def detect_disagreements(
         ),
     ]
     report = await complete(
-        messages=messages, response_model=DisagreementReport, model=model, base_url=base_url
+        messages=messages,
+        response_model=DisagreementReport,
+        model=model,
+        base_url=base_url,
+        client=client,
     )
     logger.info("Chair detected {} conflict(s)", len(report.conflicts))
     return report.conflicts
 
 
 async def moderate_debate(
-    *, conflict: Conflict, scorecards: tuple[AgentScorecard, ...], model: str, base_url: str
+    *,
+    conflict: Conflict,
+    scorecards: tuple[AgentScorecard, ...],
+    model: str,
+    base_url: str,
+    client: httpx.AsyncClient | None = None,
 ) -> DebateTranscript:
     """Run a 2-round targeted debate between disagreeing agents.
 
@@ -107,6 +145,8 @@ async def moderate_debate(
         LLM model identifier.
     base_url
         vLLM endpoint base URL.
+    client
+        Optional shared ``httpx.AsyncClient``.
 
     Returns
     -------
@@ -118,9 +158,7 @@ async def moderate_debate(
 
     for round_num in range(1, _MAX_DEBATE_ROUNDS + 1):
         for role in conflict.agents_involved:
-            prior_args = "\n".join(
-                f"[{e.role.value}, Round {e.round_number}]: {e.argument}" for e in entries
-            )
+            prior_args = _format_debate_entries(tuple(entries))
             messages = [
                 ChatMessage(role="system", content=AGENT_PROMPTS[role]),
                 ChatMessage(
@@ -129,13 +167,17 @@ async def moderate_debate(
                         f"DEBATE — Round {round_num}\n\n"
                         f"Question: {conflict.debate_question}\n\n"
                         f"Context:\n{context}\n\n"
-                        f"Prior arguments:\n{prior_args or '(none yet)'}\n\n"
+                        f"Prior arguments:\n{prior_args}\n\n"
                         "Defend or adjust your position. Respond with an AgentScorecard."
                     ),
                 ),
             ]
             response = await complete(
-                messages=messages, response_model=AgentScorecard, model=model, base_url=base_url
+                messages=messages,
+                response_model=AgentScorecard,
+                model=model,
+                base_url=base_url,
+                client=client,
             )
             justification = response.justifications.get(
                 conflict.dimension, next(iter(response.justifications.values()), "")
@@ -153,6 +195,7 @@ async def synthesize(
     debates: tuple[DebateTranscript, ...],
     model: str,
     base_url: str,
+    client: httpx.AsyncClient | None = None,
 ) -> PanelVerdict:
     """Produce the final panel verdict.
 
@@ -168,6 +211,8 @@ async def synthesize(
         LLM model identifier.
     base_url
         vLLM endpoint base URL.
+    client
+        Optional shared ``httpx.AsyncClient``.
 
     Returns
     -------
@@ -179,14 +224,9 @@ async def synthesize(
     if debates:
         sections: list[str] = []
         for transcript in debates:
-            lines = [
-                f"### Debate: {transcript.conflict_dimension}",
-                *[
-                    f"[{entry.role.value}, Round {entry.round_number}]: {entry.argument}"
-                    for entry in transcript.entries
-                ],
-            ]
-            sections.append("\n".join(lines))
+            header = f"### Debate: {transcript.conflict_dimension}"
+            body = _format_debate_entries(transcript.entries)
+            sections.append(f"{header}\n{body}")
         debate_text = "\n\n".join(sections)
 
     messages = [
@@ -202,7 +242,11 @@ async def synthesize(
         ),
     ]
     verdict = await complete(
-        messages=messages, response_model=PanelVerdict, model=model, base_url=base_url
+        messages=messages,
+        response_model=PanelVerdict,
+        model=model,
+        base_url=base_url,
+        client=client,
     )
     return PanelVerdict(
         candidate_id=candidate_id,

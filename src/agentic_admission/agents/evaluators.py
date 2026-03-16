@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from agentic_admission.agents.llm_client import ChatMessage, complete
 from agentic_admission.agents.prompts import AGENT_PROMPTS
 from agentic_admission.models.evaluation import AgentRole, AgentScorecard
 
+if TYPE_CHECKING:
+    import httpx
 
-async def evaluate_academic(*, transcript_text: str, model: str, base_url: str) -> AgentScorecard:
+
+async def evaluate_academic(
+    *, transcript_text: str, model: str, base_url: str, client: httpx.AsyncClient | None = None
+) -> AgentScorecard:
     """Run the Academic Evaluator agent.
 
     Parameters
@@ -18,6 +25,8 @@ async def evaluate_academic(*, transcript_text: str, model: str, base_url: str) 
         LLM model identifier.
     base_url
         vLLM endpoint base URL.
+    client
+        Optional shared ``httpx.AsyncClient``.
 
     Returns
     -------
@@ -29,7 +38,11 @@ async def evaluate_academic(*, transcript_text: str, model: str, base_url: str) 
         ChatMessage(role="user", content=f"Evaluate this candidate:\n\n{transcript_text}"),
     ]
     scorecard = await complete(
-        messages=messages, response_model=AgentScorecard, model=model, base_url=base_url
+        messages=messages,
+        response_model=AgentScorecard,
+        model=model,
+        base_url=base_url,
+        client=client,
     )
     return AgentScorecard(
         role=AgentRole.ACADEMIC, scores=scorecard.scores, justifications=scorecard.justifications
@@ -43,6 +56,7 @@ async def evaluate_reference(
     historical_letters: str,
     model: str,
     base_url: str,
+    client: httpx.AsyncClient | None = None,
 ) -> AgentScorecard:
     """Run the Reference Letter Specialist agent.
 
@@ -58,6 +72,8 @@ async def evaluate_reference(
         LLM model identifier.
     base_url
         vLLM endpoint base URL.
+    client
+        Optional shared ``httpx.AsyncClient``.
 
     Returns
     -------
@@ -74,7 +90,11 @@ async def evaluate_reference(
         ChatMessage(role="user", content=user_content),
     ]
     scorecard = await complete(
-        messages=messages, response_model=AgentScorecard, model=model, base_url=base_url
+        messages=messages,
+        response_model=AgentScorecard,
+        model=model,
+        base_url=base_url,
+        client=client,
     )
     return AgentScorecard(
         role=AgentRole.REFERENCE, scores=scorecard.scores, justifications=scorecard.justifications
@@ -82,7 +102,12 @@ async def evaluate_reference(
 
 
 async def evaluate_motivation(
-    *, motivation_text: str, cv_text: str, model: str, base_url: str
+    *,
+    motivation_text: str,
+    cv_text: str,
+    model: str,
+    base_url: str,
+    client: httpx.AsyncClient | None = None,
 ) -> AgentScorecard:
     """Run the Motivation & Fit Evaluator agent.
 
@@ -96,6 +121,8 @@ async def evaluate_motivation(
         LLM model identifier.
     base_url
         vLLM endpoint base URL.
+    client
+        Optional shared ``httpx.AsyncClient``.
 
     Returns
     -------
@@ -108,7 +135,11 @@ async def evaluate_motivation(
         ChatMessage(role="user", content=user_content),
     ]
     scorecard = await complete(
-        messages=messages, response_model=AgentScorecard, model=model, base_url=base_url
+        messages=messages,
+        response_model=AgentScorecard,
+        model=model,
+        base_url=base_url,
+        client=client,
     )
     return AgentScorecard(
         role=AgentRole.MOTIVATION, scores=scorecard.scores, justifications=scorecard.justifications
@@ -116,7 +147,7 @@ async def evaluate_motivation(
 
 
 async def evaluate_devils_advocate(
-    *, full_dossier_text: str, model: str, base_url: str
+    *, full_dossier_text: str, model: str, base_url: str, client: httpx.AsyncClient | None = None
 ) -> AgentScorecard:
     """Run the Devil's Advocate agent.
 
@@ -128,6 +159,8 @@ async def evaluate_devils_advocate(
         LLM model identifier.
     base_url
         vLLM endpoint base URL.
+    client
+        Optional shared ``httpx.AsyncClient``.
 
     Returns
     -------
@@ -139,7 +172,11 @@ async def evaluate_devils_advocate(
         ChatMessage(role="user", content=f"Review this complete dossier:\n\n{full_dossier_text}"),
     ]
     scorecard = await complete(
-        messages=messages, response_model=AgentScorecard, model=model, base_url=base_url
+        messages=messages,
+        response_model=AgentScorecard,
+        model=model,
+        base_url=base_url,
+        client=client,
     )
     return AgentScorecard(
         role=AgentRole.DEVILS_ADVOCATE,

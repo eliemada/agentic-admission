@@ -11,6 +11,7 @@ from agentic_admission.models.evaluation import (
     AgentRole,
     AgentScorecard,
     Conflict,
+    DebateEntry,
     DebateTranscript,
     Decision,
     PanelVerdict,
@@ -89,6 +90,7 @@ class TestModerateDebate:
         )
         assert isinstance(transcript, DebateTranscript)
         assert transcript.conflict_dimension == "reference_quality"
+        assert len(transcript.entries) == 4  # 2 agents x 2 rounds
 
 
 class TestSynthesize:
@@ -132,3 +134,67 @@ class TestSynthesize:
         assert isinstance(verdict, PanelVerdict)
         assert verdict.decision == Decision.ACCEPT
         assert len(verdict.final_scores) == 8
+
+
+class TestSynthesizeWithDebates:
+    """Tests for synthesize() when non-empty debate transcripts are provided."""
+
+    @pytest.fixture
+    def _mock_llm_verdict_with_debates(self, mocker: MockerFixture) -> None:
+        verdict = PanelVerdict(
+            candidate_id="test_candidate",
+            scorecards=(),
+            debates=(),
+            final_scores={
+                "academic_strength": 7,
+                "institution_quality": 6,
+                "reference_quality": 6,
+                "calibration_confidence": 5,
+                "motivation_clarity": 7,
+                "program_fit": 6,
+                "risk_flags": 8,
+                "consistency": 7,
+            },
+            composite_score=6.5,
+            decision=Decision.WAITLIST,
+            justification="Borderline after debate consideration.",
+        )
+
+        async def fake_complete(
+            *, messages: Any, response_model: Any, model: Any, base_url: Any, **kwargs: Any
+        ) -> PanelVerdict:
+            return verdict
+
+        mocker.patch("agentic_admission.agents.chair.complete", side_effect=fake_complete)
+
+    @pytest.mark.usefixtures("_mock_llm_verdict_with_debates")
+    async def test_includes_debate_context(self):
+        """Synthesize with non-empty debates returns a valid verdict."""
+        debates = (
+            DebateTranscript(
+                conflict_dimension="reference_quality",
+                entries=(
+                    DebateEntry(
+                        role=AgentRole.REFERENCE,
+                        round_number=1,
+                        argument="The letter is genuinely strong.",
+                    ),
+                    DebateEntry(
+                        role=AgentRole.DEVILS_ADVOCATE,
+                        round_number=1,
+                        argument="The letter uses generic praise.",
+                    ),
+                ),
+            ),
+        )
+        verdict = await synthesize(
+            candidate_id="test_candidate",
+            scorecards=SAMPLE_SCORECARDS,
+            debates=debates,
+            model="test",
+            base_url="http://test",
+        )
+        assert isinstance(verdict, PanelVerdict)
+        assert verdict.decision == Decision.WAITLIST
+        assert len(verdict.debates) == 1
+        assert verdict.debates[0].conflict_dimension == "reference_quality"
