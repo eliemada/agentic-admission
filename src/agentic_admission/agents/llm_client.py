@@ -3,10 +3,24 @@
 from __future__ import annotations
 
 import json
+from typing import Literal
 
 import httpx
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+from tenacity import RetryError, retry, retry_if_exception, stop_after_attempt, wait_exponential
+
+
+class LLMError(Exception):
+    """Base exception for LLM client errors."""
+
+
+class LLMResponseError(LLMError):
+    """LLM returned unparseable or invalid response."""
+
+
+class LLMConnectionError(LLMError):
+    """Transient connection/HTTP error after retries exhausted."""
 
 
 class ChatMessage(BaseModel, frozen=True):
@@ -20,8 +34,61 @@ class ChatMessage(BaseModel, frozen=True):
         The message text.
     """
 
-    role: str
+    role: Literal["system", "user", "assistant"]
     content: str
+
+
+_RETRYABLE_STATUS_CODES: frozenset[int] = frozenset({429, 502, 503, 504})
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Return True for transient errors that warrant a retry.
+
+    Parameters
+    ----------
+    exc
+        The exception to inspect.
+
+    Returns
+    -------
+    bool
+        Whether the exception is retryable.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in _RETRYABLE_STATUS_CODES
+    return isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout))
+
+
+@retry(
+    retry=retry_if_exception(_is_retryable),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=30),
+    reraise=False,
+)
+async def _post_with_retry(*, base_url: str, payload: dict) -> httpx.Response:
+    """Send a POST request to the LLM endpoint with automatic retries.
+
+    Parameters
+    ----------
+    base_url
+        Base URL of the vLLM endpoint.
+    payload
+        JSON payload to send.
+
+    Returns
+    -------
+    httpx.Response
+        The HTTP response from the server.
+
+    Raises
+    ------
+    LLMConnectionError
+        When all retry attempts are exhausted.
+    """
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(f"{base_url}/chat/completions", json=payload)
+        response.raise_for_status()
+    return response
 
 
 async def complete[T: BaseModel](
@@ -54,6 +121,13 @@ async def complete[T: BaseModel](
     -------
     T
         Parsed Pydantic model instance.
+
+    Raises
+    ------
+    LLMConnectionError
+        When the server is unreachable or returns transient errors after retries.
+    LLMResponseError
+        When the response cannot be parsed as JSON or fails Pydantic validation.
     """
     schema = response_model.model_json_schema()
     payload = {
@@ -69,11 +143,27 @@ async def complete[T: BaseModel](
 
     logger.debug("LLM request to {}: model={}", base_url, model)
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(f"{base_url}/chat/completions", json=payload)
-        response.raise_for_status()
+    try:
+        response = await _post_with_retry(base_url=base_url, payload=payload)
+    except RetryError as exc:
+        cause = exc.last_attempt.exception()
+        msg = f"LLM request failed after retries: {cause}"
+        raise LLMConnectionError(msg) from cause
+    except (httpx.HTTPStatusError, httpx.ConnectError, httpx.ReadTimeout) as exc:
+        msg = f"LLM request failed: {exc}"
+        raise LLMConnectionError(msg) from exc
 
     body = response.json()
     raw_content = body["choices"][0]["message"]["content"]
-    parsed = json.loads(raw_content)
-    return response_model.model_validate(parsed)
+
+    try:
+        parsed = json.loads(raw_content)
+    except json.JSONDecodeError as exc:
+        msg = f"LLM returned unparseable JSON: {raw_content[:200]}"
+        raise LLMResponseError(msg) from exc
+
+    try:
+        return response_model.model_validate(parsed)
+    except ValidationError as exc:
+        msg = f"LLM response failed {response_model.__name__} validation"
+        raise LLMResponseError(msg) from exc
