@@ -14,6 +14,7 @@ def run() -> None:
     logger.remove()
     logger.add(sys.stderr, level=settings.log_level)
     logger.info("agentic-admission starting (model={})", settings.model_name)
+    logger.info("Agent deliberation system ready. Use evaluate_candidate() to evaluate dossiers.")
 
 
 if __name__ == "__main__":
