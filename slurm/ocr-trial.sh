@@ -60,7 +60,7 @@ uv run vllm serve reducto/RolmOCR \
     --max-model-len 2048 \
     --gpu-memory-utilization 0.85 \
     --enforce-eager \
-    --limit-mm-per-prompt image=1 \
+    --limit-mm-per-prompt '{"image": 1}' \
     --mm-processor-kwargs '{"max_pixels": 512000}' \
     &
 
