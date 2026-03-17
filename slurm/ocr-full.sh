@@ -61,7 +61,8 @@ echo "[$(date)] Starting vLLM server on port $VLLM_PORT ..."
 uv run vllm serve reducto/RolmOCR \
     --port "$VLLM_PORT" \
     --max-model-len 4096 \
-    --gpu-memory-utilization 0.90 \
+    --gpu-memory-utilization 0.85 \
+    --enforce-eager \
     &
 
 VLLM_PID=$!
@@ -75,10 +76,10 @@ cleanup() {
 trap cleanup EXIT
 
 # Wait for vLLM
-echo "[$(date)] Waiting for vLLM to start ..."
-for i in $(seq 1 60); do
+echo "[$(date)] Waiting for vLLM to start (may take 5-10 min on V100) ..."
+for i in $(seq 1 120); do
     if curl -sf "http://localhost:${VLLM_PORT}/health" > /dev/null 2>&1; then
-        echo "[$(date)] vLLM is ready after ~${i}s"
+        echo "[$(date)] vLLM is ready after ~$((i * 5))s"
         break
     fi
     if ! kill -0 "$VLLM_PID" 2>/dev/null; then
@@ -89,7 +90,7 @@ for i in $(seq 1 60); do
 done
 
 if ! curl -sf "http://localhost:${VLLM_PORT}/health" > /dev/null 2>&1; then
-    echo "[$(date)] ERROR: vLLM failed to start within 300s"
+    echo "[$(date)] ERROR: vLLM failed to start within 600s"
     exit 1
 fi
 
