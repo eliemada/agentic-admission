@@ -57,9 +57,11 @@ uv run python -c "from huggingface_hub import snapshot_download; snapshot_downlo
 echo "[$(date)] Starting vLLM server on port $VLLM_PORT ..."
 uv run vllm serve reducto/RolmOCR \
     --port "$VLLM_PORT" \
-    --max-model-len 4096 \
+    --max-model-len 2048 \
     --gpu-memory-utilization 0.85 \
     --enforce-eager \
+    --limit-mm-per-prompt image=1 \
+    --mm-processor-kwargs '{"max_pixels": 512000}' \
     &
 
 VLLM_PID=$!
