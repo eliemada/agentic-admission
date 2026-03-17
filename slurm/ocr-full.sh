@@ -24,7 +24,7 @@ set -euo pipefail
 
 VLLM_PORT=8001
 FORCE="${FORCE:-0}"
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 cd "$PROJECT_DIR"
 mkdir -p slurm/logs

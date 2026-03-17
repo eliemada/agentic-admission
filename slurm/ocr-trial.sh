@@ -21,7 +21,7 @@ set -euo pipefail
 
 MAX_PDFS="${MAX_PDFS:-5}"
 VLLM_PORT=8001
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 cd "$PROJECT_DIR"
 mkdir -p slurm/logs
