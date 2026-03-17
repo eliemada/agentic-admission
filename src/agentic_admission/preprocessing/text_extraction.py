@@ -101,7 +101,7 @@ def _build_api_converter() -> object:
     url = settings.vlm_base_url.rstrip("/") + "/chat/completions"
     vlm_options = ApiVlmOptions(
         url=AnyUrl(url),
-        params={"model": settings.vlm_model_name, "max_tokens": 4096},
+        params={"model": settings.vlm_model_name, "max_tokens": 2048},
         prompt=_PROMPT_MARKDOWN,
         response_format=ResponseFormat.MARKDOWN,
         timeout=300.0,
