@@ -30,21 +30,22 @@ cd "$PROJECT_DIR"
 mkdir -p slurm/logs
 
 # ---------------------------------------------------------------------------
-# 1. Load modules
+# 1. Load modules (only CUDA — Python is managed by uv)
 # ---------------------------------------------------------------------------
 module purge
-module load gcc python cuda
+module load gcc cuda
 
 # ---------------------------------------------------------------------------
-# 2. Install dependencies
+# 2. Install dependencies (uv manages Python 3.12+)
 # ---------------------------------------------------------------------------
 if ! command -v uv &> /dev/null; then
-    pip install --user uv
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
 fi
 uv sync --frozen
 
-# vLLM is infra, not an app dependency — install it alongside
-pip install --user vllm
+# vLLM is infra, not an app dependency — install into the project venv
+uv pip install vllm
 
 # ---------------------------------------------------------------------------
 # 3. Pre-download model weights
