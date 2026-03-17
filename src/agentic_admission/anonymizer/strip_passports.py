@@ -32,7 +32,7 @@ _DOSSIER_ROOT = Path("data/raw/applications/dossiers")
 _OUTPUT_PATH = Path("data/processed/dossier_inventory.parquet")
 
 _PASSPORT_KEYWORDS = ("passeport", "identite", "identité")
-"""Substrings matched case-insensitively against subdirectory names."""
+# Substrings matched case-insensitively against subdirectory names.
 
 
 # ---------------------------------------------------------------------------

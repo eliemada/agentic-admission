@@ -283,7 +283,7 @@ ALL_CATEGORIES: tuple[frozenset[str], ...] = (
     ACTIVITIES,
     LANGUAGES,
 )
-"""All allow-list categories, for iteration."""
+# All allow-list categories, for iteration.
 
 
 def build_allow_list(

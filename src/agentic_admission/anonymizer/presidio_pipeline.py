@@ -57,7 +57,7 @@ _ENTITY_PLACEHOLDER_MAP: dict[str, str] = {
     "mobile phone number": "<PHONE>",
     "organization": "<ORG>",
 }
-"""Map from Presidio/GLiNER entity types to placeholder strings."""
+# Map from Presidio/GLiNER entity types to placeholder strings.
 
 _DEFAULT_PLACEHOLDER = "<PII>"
 
