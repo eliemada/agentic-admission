@@ -30,17 +30,17 @@ cd "$PROJECT_DIR"
 mkdir -p slurm/logs
 
 # ---------------------------------------------------------------------------
-# 1. Load modules (only CUDA — Python is managed by uv)
+# 1. Clean environment — PyTorch/vLLM bundle their own CUDA runtime,
+#    so we avoid loading system CUDA modules that can conflict.
 # ---------------------------------------------------------------------------
 module purge
-module load gcc cuda
 
 # ---------------------------------------------------------------------------
 # 2. Install dependencies (uv manages Python 3.12+)
 # ---------------------------------------------------------------------------
+export PATH="$HOME/.local/bin:$PATH"
 if ! command -v uv &> /dev/null; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$HOME/.local/bin:$PATH"
 fi
 uv sync --frozen
 
@@ -58,7 +58,6 @@ uv run python -c "from huggingface_hub import snapshot_download; snapshot_downlo
 # 4. Start vLLM server
 # ---------------------------------------------------------------------------
 echo "[$(date)] Starting vLLM server on port $VLLM_PORT ..."
-export VLLM_USE_V1=1
 uv run vllm serve reducto/RolmOCR \
     --port "$VLLM_PORT" \
     --max-model-len 4096 \
