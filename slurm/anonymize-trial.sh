@@ -36,9 +36,9 @@ if ! command -v uv &> /dev/null; then
 fi
 uv sync --frozen
 
-# Download spaCy model if missing
+# Download spaCy model if missing (use uv pip, not spacy download which needs pip)
 uv run python -c "import spacy; spacy.load('en_core_web_sm')" 2>/dev/null \
-    || uv run python -m spacy download en_core_web_sm
+    || uv pip install "en_core_web_sm@https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
 
 # GLiNER model cache
 export HF_HOME="${SCRATCH:-/tmp}/.cache/huggingface"
