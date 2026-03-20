@@ -23,6 +23,7 @@ dependencies = [
   "pydantic-settings (>=2.7.0)",
   "pymupdf>=1.27.2",
   "en-core-web-sm>=3.8.0",
+  "streamlit>=1.55.0",
 ]
 
 [project.scripts]
@@ -212,6 +213,10 @@ type = "simple"
   [tool.poe.tasks.ingest]
   help = "Ingest dossiers from ZIP/TAR/directory into staging"
   cmd = "python -m agentic_admission.intake.adapter"
+
+  [tool.poe.tasks.dashboard]
+  help = "Open the dossier pipeline viewer"
+  cmd = "streamlit run dashboard/app.py --server.port 8501"
 
   [tool.poe.tasks.run]
   help = "Run the admission agent"
