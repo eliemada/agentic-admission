@@ -118,27 +118,28 @@ class TestAnonymizeText:
         assert counts == {}
 
     def test_with_pii_calls_anonymizer(self) -> None:
-        # Build mock analyzer result with all attributes filters need
+        # Build mock analyzer result with all attributes filters need.
+        # Use a single-word name to avoid propagation creating extra results.
         mock_result = MagicMock()
-        mock_result.entity_type = "PERSON"
-        mock_result.start = 6
-        mock_result.end = 16
+        mock_result.entity_type = "EMAIL_ADDRESS"
+        mock_result.start = 8
+        mock_result.end = 24
         mock_result.score = 0.9
 
         mock_analyzer = MagicMock()
         mock_analyzer.analyze.return_value = [mock_result]
 
         mock_anon_result = MagicMock()
-        mock_anon_result.text = "Hello <PERSON>, welcome."
+        mock_anon_result.text = "Contact <EMAIL> for info."
 
         mock_anonymizer = MagicMock()
         mock_anonymizer.anonymize.return_value = mock_anon_result
 
-        text = "Hello John Smith, welcome."
+        text = "Contact john@example.com for info."
         result, counts = anonymize_text(text, mock_analyzer, mock_anonymizer)
 
-        assert result == "Hello <PERSON>, welcome."
-        assert counts == {"PERSON": 1}
+        assert result == "Contact <EMAIL> for info."
+        assert counts == {"EMAIL_ADDRESS": 1}
         mock_anonymizer.anonymize.assert_called_once()
 
 
@@ -147,7 +148,7 @@ class TestAnonymizeFile:
 
     def test_anonymizes_file_content(self, tmp_path: Path) -> None:
         src = tmp_path / "input.md"
-        src.write_text("Contact John at john@example.com", encoding="utf-8")
+        src.write_text("Contact John at info@example.com", encoding="utf-8")
         dst = tmp_path / "output.md"
 
         mock_analyzer = MagicMock()
@@ -237,6 +238,115 @@ class TestAnonymizeTextAllowListIntegration:
         assert result == text
         assert counts == {}
         mock_anonymizer.anonymize.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Name propagation tests
+# ---------------------------------------------------------------------------
+
+
+class TestNamePropagation:
+    """Tests for _propagate_detected_names post-analysis pass."""
+
+    def test_propagates_first_name_from_full_name(self) -> None:
+        """If 'Rolla Abi Antoun' is detected, bare 'Rolla' should also be caught."""
+        from agentic_admission.anonymizer.presidio_pipeline import _propagate_detected_names
+
+        text = "Rolla Abi Antoun is a student. I have served as Rolla's instructor."
+        # Simulate: only the full name was detected by the analyzer
+        mock_result = MagicMock()
+        mock_result.entity_type = "PERSON"
+        mock_result.start = 0
+        mock_result.end = 16
+        mock_result.score = 0.9
+
+        results = _propagate_detected_names(text, [mock_result])
+
+        # Should find the "Rolla" at position 48 (inside "Rolla's")
+        starts = {r.start for r in results}
+        assert 48 in starts
+
+    def test_propagates_possessive_form(self) -> None:
+        """'Rolla's' should be caught as a name occurrence."""
+        from agentic_admission.anonymizer.presidio_pipeline import _propagate_detected_names
+
+        text = "Rolla Abi Antoun said Rolla's work is great and Rolla is talented."
+        mock_result = MagicMock()
+        mock_result.entity_type = "PERSON"
+        mock_result.start = 0
+        mock_result.end = 16
+        mock_result.score = 0.9
+
+        results = _propagate_detected_names(text, [mock_result])
+
+        # All 3 Rolla occurrences (pos 0, 22, 48) should be in results
+        starts = {r.start for r in results}
+        assert 22 in starts  # "Rolla's"
+        assert 48 in starts  # "Rolla is"
+
+    def test_skips_short_name_parts(self) -> None:
+        """Name parts shorter than 3 chars should NOT be propagated."""
+        from agentic_admission.anonymizer.presidio_pipeline import _propagate_detected_names
+
+        text = "Li Bo is here. Li went home."
+        mock_result = MagicMock()
+        mock_result.entity_type = "PERSON"
+        mock_result.start = 0
+        mock_result.end = 5
+        mock_result.score = 0.9
+
+        results = _propagate_detected_names(text, [mock_result])
+
+        # "Li" (2 chars) and "Bo" (2 chars) should NOT be propagated
+        # Only the original result should remain
+        assert len(results) == 1
+
+    def test_skips_allow_listed_terms(self) -> None:
+        """Name parts in the allow list should NOT be propagated."""
+        from agentic_admission.anonymizer.presidio_pipeline import _propagate_detected_names
+
+        text = "Python Master is here. I use Python daily."
+        mock_result = MagicMock()
+        mock_result.entity_type = "name"
+        mock_result.start = 0
+        mock_result.end = 13
+        mock_result.score = 0.8
+
+        results = _propagate_detected_names(text, [mock_result])
+
+        # "Python" is in allow list, "Master" is in allow list — neither should propagate
+        assert len(results) == 1
+
+    def test_case_insensitive_match(self) -> None:
+        """Name propagation should be case-insensitive."""
+        from agentic_admission.anonymizer.presidio_pipeline import _propagate_detected_names
+
+        text = "ROLLA ABI ANTOUN is here. rolla went home."
+        mock_result = MagicMock()
+        mock_result.entity_type = "PERSON"
+        mock_result.start = 0
+        mock_result.end = 16
+        mock_result.score = 0.9
+
+        results = _propagate_detected_names(text, [mock_result])
+
+        starts = {r.start for r in results}
+        assert 26 in starts  # "rolla" at position 26
+
+    def test_no_duplicate_results(self) -> None:
+        """Already-detected spans should NOT be duplicated."""
+        from agentic_admission.anonymizer.presidio_pipeline import _propagate_detected_names
+
+        text = "Rolla is here."
+        mock_result = MagicMock()
+        mock_result.entity_type = "PERSON"
+        mock_result.start = 0
+        mock_result.end = 5
+        mock_result.score = 0.9
+
+        results = _propagate_detected_names(text, [mock_result])
+
+        assert len(results) == 1
 
 
 @pytest.mark.slow

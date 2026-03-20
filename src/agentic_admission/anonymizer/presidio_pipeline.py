@@ -16,6 +16,7 @@ Run standalone
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -205,6 +206,98 @@ def _build_operators(entity_types: list[str]) -> dict[str, Any]:
     return operators
 
 
+def _propagate_detected_names(text: str, results: list[Any]) -> list[Any]:
+    """Find additional occurrences of already-detected names in *text*.
+
+    When the analyzer detects "Rolla Abi Antoun" at one position, this function
+    scans for all other occurrences of "Rolla", "Abi Antoun", and the full name
+    elsewhere in the text and creates synthetic results for them.
+
+    Parameters
+    ----------
+    text
+        Full document text.
+    results
+        Presidio analyzer results from the initial analysis pass.
+
+    Returns
+    -------
+    list
+        Original results plus any new synthetic results for propagated names.
+    """
+    from agentic_admission.anonymizer.allow_lists import build_allow_list
+
+    _NAME_ENTITY_TYPES = frozenset({"PERSON", "person", "name"})
+    _MIN_PROPAGATION_LEN = 3
+    _PROPAGATED_SCORE = 0.85
+
+    allow_set = frozenset(w.lower() for w in build_allow_list())
+
+    # Collect existing spans to avoid duplicates.
+    existing_spans: set[tuple[int, int]] = {(r.start, r.end) for r in results}
+
+    # Collect unique name parts from detected PERSON/name entities.
+    name_parts: set[str] = set()
+    for r in results:
+        if r.entity_type not in _NAME_ENTITY_TYPES:
+            continue
+        detected_text = text[r.start : r.end].strip()
+        # Add the full name.
+        if len(detected_text) >= _MIN_PROPAGATION_LEN:
+            name_parts.add(detected_text)
+        # Add individual words (e.g., "Rolla", "Antoun" from "Rolla Abi Antoun").
+        for word in detected_text.split():
+            if len(word) >= _MIN_PROPAGATION_LEN and word.lower() not in allow_set:
+                name_parts.add(word)
+
+    if not name_parts:
+        return results
+
+    # Scan text for all occurrences of each name part.
+    new_results = list(results)
+    for part in name_parts:
+        pattern = re.compile(re.escape(part), re.IGNORECASE)
+        for match in pattern.finditer(text):
+            start, end = match.start(), match.end()
+            if (start, end) in existing_spans:
+                continue
+            # Check word boundary (don't match inside longer words).
+            if start > 0 and text[start - 1].isalnum():
+                continue
+            # Allow possessive 's after the match.
+            check_end = end
+            if check_end < len(text) and text[check_end] in ("'", "\u2019"):
+                # Skip past 's
+                if check_end + 1 < len(text) and text[check_end + 1].lower() == "s":
+                    check_end += 2
+            if check_end < len(text) and text[check_end].isalnum():
+                continue
+
+            try:
+                from presidio_analyzer import RecognizerResult
+
+                new_result = RecognizerResult(
+                    entity_type="PERSON",
+                    start=start,
+                    end=end,
+                    score=_PROPAGATED_SCORE,
+                )
+            except ImportError:
+                # Fallback for test environments without presidio.
+                from unittest.mock import MagicMock
+
+                new_result = MagicMock()
+                new_result.entity_type = "PERSON"
+                new_result.start = start
+                new_result.end = end
+                new_result.score = _PROPAGATED_SCORE
+
+            new_results.append(new_result)
+            existing_spans.add((start, end))
+
+    return new_results
+
+
 def anonymize_text(
     text: str,
     analyzer: Any,
@@ -254,6 +347,9 @@ def anonymize_text(
 
     if not results:
         return text, {}
+
+    # Propagate detected names to catch all occurrences in the document.
+    results = _propagate_detected_names(text, results)
 
     # Apply post-analysis filters to reduce false positives.
     effective_filters = filter_pipeline if filter_pipeline is not None else build_filter_pipeline()

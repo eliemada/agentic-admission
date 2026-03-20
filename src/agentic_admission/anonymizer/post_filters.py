@@ -308,6 +308,41 @@ def filter_duration_as_date(text: str, results: list[Any]) -> list[Any]:
     return filtered
 
 
+# Pure-digit pattern: 7-13 digits with no phone formatting.
+_PURE_DIGITS_PATTERN = re.compile(r"^\d{7,13}$")
+
+# Entity types where pure-digit strings are likely misclassified.
+_NUMERIC_ID_ENTITY_TYPES: frozenset[str] = frozenset({"PHONE_NUMBER", "EMAIL_ADDRESS"})
+
+
+def filter_numeric_ids(text: str, results: list[Any]) -> list[Any]:
+    """Drop PHONE/EMAIL matches that are pure digit strings (application codes).
+
+    Catches administrative numeric codes like ``"2839273087"`` that get
+    misclassified as phone numbers or email addresses by pattern matchers.
+
+    Parameters
+    ----------
+    text
+        Original text.
+    results
+        Presidio analyzer results.
+
+    Returns
+    -------
+    list
+        Results excluding pure-digit misclassifications.
+    """
+    filtered = []
+    for r in results:
+        if r.entity_type in _NUMERIC_ID_ENTITY_TYPES:
+            entity_text = text[r.start : r.end].strip()
+            if _PURE_DIGITS_PATTERN.match(entity_text):
+                continue
+        filtered.append(r)
+    return filtered
+
+
 # ---------------------------------------------------------------------------
 # Pipeline composition
 # ---------------------------------------------------------------------------
@@ -349,6 +384,7 @@ def build_filter_pipeline(
         filter_by_length,
         filter_common_words,
         filter_duration_as_date,
+        filter_numeric_ids,
     ]
 
 
