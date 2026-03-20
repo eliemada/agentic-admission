@@ -109,6 +109,30 @@ _COMMON_WORDS: frozenset[str] = frozenset(
         "might",
         "can",
         "could",
+        # Adjectives / nouns frequently misidentified as PERSON
+        "creative",
+        "first",
+        "second",
+        "third",
+        "last",
+        "next",
+        "name",
+        "student",
+        "students",
+        "member",
+        "members",
+        "intern",
+        "interns",
+        "volunteer",
+        "volunteers",
+        "madam",
+        "sir",
+        "mr",
+        "mrs",
+        "ms",
+        "miss",
+        "dr",
+        "prof",
     }
 )
 
@@ -308,6 +332,43 @@ def filter_duration_as_date(text: str, results: list[Any]) -> list[Any]:
     return filtered
 
 
+# Grade pattern: a number 0-100 optionally with decimals, optionally followed by /N.
+_GRADE_PATTERN = re.compile(r"^\d{1,3}(?:\.\d{1,2})?(?:/\d{1,3})?$")
+
+
+def filter_grade_as_date(text: str, results: list[Any]) -> list[Any]:
+    """Drop DATE_TIME entities that are actually numeric grades.
+
+    Catches ``"14.08"``, ``"13.02"``, ``"85"``, ``"14.08/20"`` which are
+    academic scores misidentified as calendar dates (DD.MM format).
+
+    Only drops values where the integer part is 0-100 (valid grade range).
+
+    Parameters
+    ----------
+    text
+        Original text.
+    results
+        Presidio analyzer results.
+
+    Returns
+    -------
+    list
+        Results excluding grade-like DATE_TIME matches.
+    """
+    filtered = []
+    for r in results:
+        if r.entity_type == "DATE_TIME":
+            entity_text = text[r.start : r.end].strip()
+            if _GRADE_PATTERN.match(entity_text):
+                # Extract the integer part and check it's in grade range.
+                int_part = entity_text.split(".")[0].split("/")[0]
+                if int_part.isdigit() and int(int_part) <= 100:
+                    continue
+        filtered.append(r)
+    return filtered
+
+
 # Pure-digit pattern: 7-13 digits with no phone formatting.
 _PURE_DIGITS_PATTERN = re.compile(r"^\d{7,13}$")
 
@@ -384,6 +445,7 @@ def build_filter_pipeline(
         filter_by_length,
         filter_common_words,
         filter_duration_as_date,
+        filter_grade_as_date,
         filter_numeric_ids,
     ]
 

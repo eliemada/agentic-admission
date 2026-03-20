@@ -19,6 +19,11 @@ LANGUAGES
     Natural language names that should never be flagged as PII.
     Defense-in-depth: even with NRP excluded via post-filter,
     language names like "French" could be caught as PERSON.
+FORM_LABELS
+    French and English form field labels from structured documents
+    (synthese, transcripts) that are mistakenly tagged as PII entities.
+JOB_TITLES
+    Professional titles and roles commonly misidentified as PERSON.
 """
 
 from __future__ import annotations
@@ -68,6 +73,7 @@ ACADEMIC_TERMS: frozenset[str] = frozenset(
         "PhD",
         "Doctorate",
         "MBA",
+        "MFA",
         "Minor",
         "Major",
         "Diploma",
@@ -90,6 +96,24 @@ ACADEMIC_TERMS: frozenset[str] = frozenset(
         "ECTS",
         "Semester",
         "Dean",
+        "B.Tech",
+        "M.Tech",
+        "B.Sc",
+        "M.Sc",
+        "B.Eng",
+        "M.Eng",
+        "B.A",
+        "M.A",
+        "M.A.D",
+        "BSc",
+        "MSc",
+        "BEng",
+        "MEng",
+        "Licence",
+        "Baccalauréat",
+        "Ingénieur",
+        "Doctorat",
+        "Maîtrise",
     }
 )
 
@@ -275,6 +299,96 @@ ACTIVITIES: frozenset[str] = frozenset(
     }
 )
 
+FORM_LABELS: frozenset[str] = frozenset(
+    {
+        # French form labels from synthese / transcripts
+        "Nom",
+        "Prénom",
+        "Adresse",
+        "Téléphone",
+        "Ville",
+        "Pays",
+        "Nationalité",
+        "Domicile",
+        "Date de naissance",
+        "Lieu de naissance",
+        "Sexe",
+        "Féminin",
+        "Masculin",
+        "Célibataire",
+        "État civil",
+        "Courriel",
+        "Email",
+        "Fax",
+        "Site web",
+        "Rue",
+        "Code postal",
+        "Canton",
+        "Commune",
+        # English equivalents
+        "Name",
+        "First name",
+        "Last name",
+        "Surname",
+        "Address",
+        "Telephone",
+        "Phone",
+        "City",
+        "Country",
+        "Nationality",
+        "Date of birth",
+        "Place of birth",
+        "Gender",
+        "Marital status",
+        "Postal code",
+        "Province",
+    }
+)
+
+JOB_TITLES: frozenset[str] = frozenset(
+    {
+        "Engineer",
+        "Coordinator",
+        "Director",
+        "Manager",
+        "Professor",
+        "Instructor",
+        "Lecturer",
+        "Researcher",
+        "Analyst",
+        "Consultant",
+        "Architect",
+        "Developer",
+        "Designer",
+        "Specialist",
+        "Supervisor",
+        "Administrator",
+        "Assistant",
+        "Associate",
+        "Intern",
+        "Volunteer",
+        "Technician",
+        "Officer",
+        "Representative",
+        "Advisor",
+        "Coach",
+        "Mentor",
+        "Student",
+        "Member",
+        # French titles
+        "Ingénieur",
+        "Directeur",
+        "Directrice",
+        "Professeur",
+        "Responsable",
+        "Conseiller",
+        "Technicien",
+        "Stagiaire",
+        "Volontaire",
+        "Recteur",
+    }
+)
+
 ALL_CATEGORIES: tuple[frozenset[str], ...] = (
     INSTITUTIONS,
     ACADEMIC_TERMS,
@@ -282,6 +396,8 @@ ALL_CATEGORIES: tuple[frozenset[str], ...] = (
     TECHNICAL_TERMS,
     ACTIVITIES,
     LANGUAGES,
+    FORM_LABELS,
+    JOB_TITLES,
 )
 # All allow-list categories, for iteration.
 
