@@ -1,6 +1,6 @@
 """PII detection and anonymization using Presidio with GLiNER NER backend.
 
-Uses GLiNER (``urchade/gliner_multi_pii-v1``) for zero-shot multilingual NER
+Uses GLiNER (``knowledgator/gliner-multitask-large-v0.5``) for zero-shot multilingual NER
 instead of heavy spaCy NER models. Only ``en_core_web_sm`` (~12 MB) is needed
 for tokenization; GLiNER handles all entity recognition across 40+ languages.
 

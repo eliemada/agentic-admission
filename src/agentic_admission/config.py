@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     vlm_model_name: str = "Qwen/Qwen3-VL-8B-Instruct"
     vlm_base_url: str = "http://localhost:8001/v1"
     presidio_score_threshold: float = 0.5
-    gliner_model: str = "urchade/gliner_multi_pii-v1"
+    gliner_model: str = "knowledgator/gliner-multitask-large-v0.5"
     anonymizer_excluded_entities: frozenset[str] = frozenset(
         {"LOCATION", "address", "NRP", "organization", "ORGANIZATION"}
     )
