@@ -369,6 +369,38 @@ def filter_grade_as_date(text: str, results: list[Any]) -> list[Any]:
     return filtered
 
 
+# Academic code pattern: known course/dept prefix + digits (not a passport).
+_ACADEMIC_CODE_PATTERN = re.compile(
+    r"^(?:CS|EE|ME|PH|MA|CH|MT|IN|SV|SIE|COM|GC|AR|MX|BE|BT|SE|IT|EC)\d+$"
+)
+
+
+def filter_academic_codes(text: str, results: list[Any]) -> list[Any]:
+    """Drop PASSPORT matches that are actually academic course codes.
+
+    Catches patterns like ``CS250112`` or ``EE310`` that share the passport
+    format (uppercase letters + digits) but are course identifiers.
+
+    Parameters
+    ----------
+    text
+        Original text.
+    results
+        Presidio analyzer results.
+
+    Returns
+    -------
+    list
+        Results excluding academic code false positives.
+    """
+    return [
+        r
+        for r in results
+        if r.entity_type != "PASSPORT"
+        or not _ACADEMIC_CODE_PATTERN.match(text[r.start : r.end])
+    ]
+
+
 # Pure-digit pattern: 7-13 digits with no phone formatting.
 _PURE_DIGITS_PATTERN = re.compile(r"^\d{7,13}$")
 
@@ -447,6 +479,7 @@ def build_filter_pipeline(
         filter_duration_as_date,
         filter_grade_as_date,
         filter_numeric_ids,
+        filter_academic_codes,
     ]
 
 

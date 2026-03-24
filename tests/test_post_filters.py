@@ -494,14 +494,14 @@ class TestFilterCommonWordsExpanded:
 class TestBuildFilterPipeline:
     """Tests for pipeline composition."""
 
-    def test_returns_seven_filters(self) -> None:
+    def test_returns_nine_filters(self) -> None:
         pipeline = build_filter_pipeline()
-        assert len(pipeline) == 8
+        assert len(pipeline) == 9
 
     def test_custom_threshold_config(self) -> None:
         config = build_threshold_config(overrides={"PERSON": 0.9})
         pipeline = build_filter_pipeline(threshold_config=config)
-        assert len(pipeline) == 8
+        assert len(pipeline) == 9
 
     def test_exclusion_filter_is_first(self) -> None:
         """The exclusion filter must run before all other filters."""

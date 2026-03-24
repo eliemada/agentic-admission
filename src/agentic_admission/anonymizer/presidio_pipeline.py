@@ -16,6 +16,8 @@ Run standalone
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 import sys
 from dataclasses import dataclass, field
@@ -53,6 +55,7 @@ _ENTITY_PLACEHOLDER_MAP: dict[str, str] = {
     "email": "<EMAIL>",
     "phone number": "<PHONE>",
     "passport number": "<PII>",
+    "PASSPORT": "<PII>",
     "social security number": "<PII>",
     "credit card number": "<PII>",
     "mobile phone number": "<PHONE>",
@@ -298,11 +301,92 @@ def _propagate_detected_names(text: str, results: list[Any]) -> list[Any]:
     return new_results
 
 
+def _inject_candidate_name(
+    text: str, candidate_name: str, existing_results: list[Any]
+) -> list[Any]:
+    """Inject the candidate name from folder metadata as PII to redact.
+
+    Extracts name parts from the folder name (e.g. ``jaramillo_velez`` →
+    ``["jaramillo", "velez"]``), generates casing variants, and creates
+    synthetic ``RecognizerResult`` objects for every occurrence in *text*.
+
+    Parameters
+    ----------
+    text
+        Full document text.
+    candidate_name
+        Candidate folder name (underscore-separated, e.g. ``jaramillo_velez``).
+    existing_results
+        Results from the analyzer pass (used to avoid duplicate spans).
+
+    Returns
+    -------
+    list
+        Original results plus synthetic results for the candidate name.
+    """
+    from agentic_admission.anonymizer.allow_lists import build_allow_list
+
+    _INJECTED_SCORE = 0.95
+    _MIN_NAME_LEN = 3
+
+    allow_set = frozenset(w.lower() for w in build_allow_list())
+    existing_spans: set[tuple[int, int]] = {(r.start, r.end) for r in existing_results}
+    new_results = list(existing_results)
+
+    # Split folder name into name parts: "garcia_de_la_fuente" → ["garcia", "fuente"]
+    raw_parts = candidate_name.replace("-", "_").split("_")
+    name_parts: set[str] = set()
+    for part in raw_parts:
+        if len(part) >= _MIN_NAME_LEN and part.lower() not in allow_set:
+            name_parts.add(part)
+
+    # Also try the full name joined with spaces for multi-word matches.
+    full_name = " ".join(raw_parts)
+    if len(full_name) >= _MIN_NAME_LEN:
+        name_parts.add(full_name)
+
+    for part in name_parts:
+        pattern = re.compile(re.escape(part), re.IGNORECASE)
+        for match in pattern.finditer(text):
+            start, end = match.start(), match.end()
+            if (start, end) in existing_spans:
+                continue
+            # Word boundary checks.
+            if start > 0 and text[start - 1].isalnum():
+                continue
+            if end < len(text) and text[end].isalnum():
+                continue
+
+            try:
+                from presidio_analyzer import RecognizerResult
+
+                result = RecognizerResult(
+                    entity_type="PERSON",
+                    start=start,
+                    end=end,
+                    score=_INJECTED_SCORE,
+                )
+            except ImportError:
+                from unittest.mock import MagicMock
+
+                result = MagicMock()
+                result.entity_type = "PERSON"
+                result.start = start
+                result.end = end
+                result.score = _INJECTED_SCORE
+
+            new_results.append(result)
+            existing_spans.add((start, end))
+
+    return new_results
+
+
 def anonymize_text(
     text: str,
     analyzer: Any,
     anonymizer: Any,
     *,
+    candidate_name: str | None = None,
     score_threshold: float | None = None,
     allow_list: list[str] | None = None,
     filter_pipeline: list[Any] | None = None,
@@ -317,6 +401,10 @@ def anonymize_text(
         A ``PresidioAnalyzerEngine`` instance.
     anonymizer
         A ``PresidioAnonymizerEngine`` instance.
+    candidate_name
+        Candidate folder name (e.g. ``jaramillo_velez``).  When provided,
+        all occurrences of name parts are forcibly redacted regardless of
+        NER confidence.
     score_threshold
         Minimum confidence for PII detection. Defaults to settings value.
     allow_list
@@ -345,6 +433,10 @@ def anonymize_text(
         text=text, language="en", score_threshold=threshold, allow_list=effective_allow_list
     )
 
+    # Inject candidate name from folder metadata BEFORE propagation.
+    if candidate_name:
+        results = _inject_candidate_name(text, candidate_name, results)
+
     if not results:
         return text, {}
 
@@ -368,6 +460,19 @@ def anonymize_text(
         counts[r.entity_type] = counts.get(r.entity_type, 0) + 1
 
     return anonymized.text, counts
+
+
+def _extract_candidate_name(file_path: Path) -> str | None:
+    """Extract the candidate folder name from a dossier file path.
+
+    Expects paths like ``texts/2024-25-spring/jaramillo_velez/9 - .../file.md``.
+    The candidate name is the directory two levels above the file.
+    """
+    # parts: [..., semester, candidate, doc_folder, filename]
+    parts = file_path.parts
+    if len(parts) >= 4:  # noqa: PLR2004
+        return parts[-3]
+    return None
 
 
 def anonymize_file(
@@ -396,12 +501,39 @@ def anonymize_file(
     if not text.strip():
         return {}
 
-    anon_text, counts = anonymize_text(text, analyzer, anonymizer)
+    candidate_name = _extract_candidate_name(input_path)
+    anon_text, counts = anonymize_text(text, analyzer, anonymizer, candidate_name=candidate_name)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(anon_text, encoding="utf-8")
 
     return counts
+
+
+def _hash_name(name: str) -> str:
+    """Return a short deterministic hash for a name string."""
+    return hashlib.sha256(name.encode()).hexdigest()[:12]
+
+
+def _anonymize_path(relative: Path) -> Path:
+    """Replace candidate name and filename PII with hashes.
+
+    Input:  ``2024-25-spring/jaramillo_velez/9 - Doc_F123/CV_Simon.md``
+    Output: ``2024-25-spring/a1b2c3d4e5f6/9 - Doc_F123/a1b2c3d4e5f6.md``
+
+    The semester is kept as-is.  The candidate folder is hashed.
+    The document subfolder is kept (contains no PII --- only doc type + hash).
+    The filename is hashed (often contains the candidate name).
+    """
+    parts = list(relative.parts)
+    if len(parts) >= 2:  # noqa: PLR2004
+        # parts[0] = semester, parts[1] = candidate folder
+        parts[1] = _hash_name(parts[1])
+    if len(parts) >= 1:
+        # Hash the filename (preserve .md extension)
+        stem = Path(parts[-1]).stem
+        parts[-1] = _hash_name(stem) + ".md"
+    return Path(*parts)
 
 
 def _should_skip(src_path: Path, dst_path: Path) -> bool:
@@ -475,10 +607,16 @@ def anonymize_dossiers(
     if sample is not None:
         md_files = md_files[:sample]
 
+    # Mapping from hashed paths to original paths (for traceability).
+    path_mapping: dict[str, str] = {}
+
     for md_path in md_files:
         report.total_files += 1
         relative = md_path.relative_to(src)
-        out_path = dst / relative
+        anon_relative = _anonymize_path(relative)
+        out_path = dst / anon_relative
+
+        path_mapping[str(anon_relative)] = str(relative)
 
         if not force and _should_skip(md_path, out_path):
             report.skipped += 1
@@ -499,6 +637,11 @@ def anonymize_dossiers(
                 report.total_pii_found,
                 len(report.errors),
             )
+
+    # Write path mapping (gitignored — contains original names).
+    mapping_path = dst / ".path_mapping.json"
+    mapping_path.write_text(json.dumps(path_mapping, indent=2, ensure_ascii=False))
+    logger.info("Path mapping written to {}", mapping_path)
 
     return report
 
