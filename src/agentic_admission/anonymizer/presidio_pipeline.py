@@ -208,6 +208,69 @@ def _build_operators(entity_types: list[str]) -> dict[str, Any]:
     return operators
 
 
+# ---------------------------------------------------------------------------
+# Name propagation constants and helpers
+# ---------------------------------------------------------------------------
+
+_NAME_ENTITY_TYPES: frozenset[str] = frozenset({"PERSON", "person", "name"})
+_MIN_PROPAGATION_LEN = 3
+_PROPAGATED_SCORE = 0.85
+_INJECTED_SCORE = 0.95
+_MIN_NAME_LEN = 3
+
+
+def _make_person_result(start: int, end: int, score: float) -> Any:
+    """Create a synthetic PERSON RecognizerResult (or mock fallback)."""
+    try:
+        from presidio_analyzer import RecognizerResult
+
+        return RecognizerResult(entity_type="PERSON", start=start, end=end, score=score)
+    except ImportError:
+        from unittest.mock import MagicMock
+
+        result = MagicMock()
+        result.entity_type = "PERSON"
+        result.start = start
+        result.end = end
+        result.score = score
+        return result
+
+
+def _is_word_boundary(text: str, start: int, end: int) -> bool:
+    """Return True if the span [start:end] sits on word boundaries."""
+    if start > 0 and text[start - 1].isalnum():
+        return False
+    # Allow possessive 's after the match.
+    check_end = end
+    if (
+        check_end < len(text)
+        and text[check_end] in ("'", "\u2019")
+        and check_end + 1 < len(text)
+        and text[check_end + 1].lower() == "s"
+    ):
+        check_end += 2
+    return not (check_end < len(text) and text[check_end].isalnum())
+
+
+def _scan_and_add_matches(
+    text: str,
+    part: str,
+    score: float,
+    existing_spans: set[tuple[int, int]],
+    results: list[Any],
+) -> None:
+    """Scan *text* for *part* and append new PERSON results for unseen spans."""
+    pattern = re.compile(re.escape(part), re.IGNORECASE)
+    for match in pattern.finditer(text):
+        start, end = match.start(), match.end()
+        if (start, end) in existing_spans:
+            continue
+        if not _is_word_boundary(text, start, end):
+            continue
+        results.append(_make_person_result(start, end, score))
+        existing_spans.add((start, end))
+
+
 def _propagate_detected_names(text: str, results: list[Any]) -> list[Any]:
     """Find additional occurrences of already-detected names in *text*.
 
@@ -229,25 +292,16 @@ def _propagate_detected_names(text: str, results: list[Any]) -> list[Any]:
     """
     from agentic_admission.anonymizer.allow_lists import build_allow_list
 
-    _NAME_ENTITY_TYPES = frozenset({"PERSON", "person", "name"})
-    _MIN_PROPAGATION_LEN = 3
-    _PROPAGATED_SCORE = 0.85
-
     allow_set = frozenset(w.lower() for w in build_allow_list())
-
-    # Collect existing spans to avoid duplicates.
     existing_spans: set[tuple[int, int]] = {(r.start, r.end) for r in results}
 
-    # Collect unique name parts from detected PERSON/name entities.
     name_parts: set[str] = set()
     for r in results:
         if r.entity_type not in _NAME_ENTITY_TYPES:
             continue
         detected_text = text[r.start : r.end].strip()
-        # Add the full name.
         if len(detected_text) >= _MIN_PROPAGATION_LEN:
             name_parts.add(detected_text)
-        # Add individual words (e.g., "Rolla", "Antoun" from "Rolla Abi Antoun").
         for word in detected_text.split():
             if len(word) >= _MIN_PROPAGATION_LEN and word.lower() not in allow_set:
                 name_parts.add(word)
@@ -255,47 +309,11 @@ def _propagate_detected_names(text: str, results: list[Any]) -> list[Any]:
     if not name_parts:
         return results
 
-    # Scan text for all occurrences of each name part.
     new_results = list(results)
     for part in name_parts:
-        pattern = re.compile(re.escape(part), re.IGNORECASE)
-        for match in pattern.finditer(text):
-            start, end = match.start(), match.end()
-            if (start, end) in existing_spans:
-                continue
-            # Check word boundary (don't match inside longer words).
-            if start > 0 and text[start - 1].isalnum():
-                continue
-            # Allow possessive 's after the match.
-            check_end = end
-            if check_end < len(text) and text[check_end] in ("'", "\u2019"):
-                # Skip past 's
-                if check_end + 1 < len(text) and text[check_end + 1].lower() == "s":
-                    check_end += 2
-            if check_end < len(text) and text[check_end].isalnum():
-                continue
-
-            try:
-                from presidio_analyzer import RecognizerResult
-
-                new_result = RecognizerResult(
-                    entity_type="PERSON",
-                    start=start,
-                    end=end,
-                    score=_PROPAGATED_SCORE,
-                )
-            except ImportError:
-                # Fallback for test environments without presidio.
-                from unittest.mock import MagicMock
-
-                new_result = MagicMock()
-                new_result.entity_type = "PERSON"
-                new_result.start = start
-                new_result.end = end
-                new_result.score = _PROPAGATED_SCORE
-
-            new_results.append(new_result)
-            existing_spans.add((start, end))
+        _scan_and_add_matches(
+            text, part, _PROPAGATED_SCORE, existing_spans, new_results,
+        )
 
     return new_results
 
@@ -325,57 +343,22 @@ def _inject_candidate_name(
     """
     from agentic_admission.anonymizer.allow_lists import build_allow_list
 
-    _INJECTED_SCORE = 0.95
-    _MIN_NAME_LEN = 3
-
     allow_set = frozenset(w.lower() for w in build_allow_list())
     existing_spans: set[tuple[int, int]] = {(r.start, r.end) for r in existing_results}
     new_results = list(existing_results)
 
-    # Split folder name into name parts: "garcia_de_la_fuente" → ["garcia", "fuente"]
     raw_parts = candidate_name.replace("-", "_").split("_")
     name_parts: set[str] = set()
     for part in raw_parts:
         if len(part) >= _MIN_NAME_LEN and part.lower() not in allow_set:
             name_parts.add(part)
 
-    # Also try the full name joined with spaces for multi-word matches.
     full_name = " ".join(raw_parts)
     if len(full_name) >= _MIN_NAME_LEN:
         name_parts.add(full_name)
 
     for part in name_parts:
-        pattern = re.compile(re.escape(part), re.IGNORECASE)
-        for match in pattern.finditer(text):
-            start, end = match.start(), match.end()
-            if (start, end) in existing_spans:
-                continue
-            # Word boundary checks.
-            if start > 0 and text[start - 1].isalnum():
-                continue
-            if end < len(text) and text[end].isalnum():
-                continue
-
-            try:
-                from presidio_analyzer import RecognizerResult
-
-                result = RecognizerResult(
-                    entity_type="PERSON",
-                    start=start,
-                    end=end,
-                    score=_INJECTED_SCORE,
-                )
-            except ImportError:
-                from unittest.mock import MagicMock
-
-                result = MagicMock()
-                result.entity_type = "PERSON"
-                result.start = start
-                result.end = end
-                result.score = _INJECTED_SCORE
-
-            new_results.append(result)
-            existing_spans.add((start, end))
+        _scan_and_add_matches(text, part, _INJECTED_SCORE, existing_spans, new_results)
 
     return new_results
 
@@ -467,7 +450,7 @@ def _extract_candidate_name(file_path: Path) -> str | None:
     Expects paths like ``texts/2024-25-spring/jaramillo_velez/9 - .../file.md``.
     The candidate name is the directory two levels above the file.
     """
-    # parts: [..., semester, candidate, doc_folder, filename]
+    # Path structure: semester / candidate / doc_folder / filename
     parts = file_path.parts
     if len(parts) >= 4:  # noqa: PLR2004
         return parts[-3]

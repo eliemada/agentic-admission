@@ -334,6 +334,7 @@ def filter_duration_as_date(text: str, results: list[Any]) -> list[Any]:
 
 # Grade pattern: a number 0-100 optionally with decimals, optionally followed by /N.
 _GRADE_PATTERN = re.compile(r"^\d{1,3}(?:\.\d{1,2})?(?:/\d{1,3})?$")
+_MAX_GRADE_VALUE = 100
 
 
 def filter_grade_as_date(text: str, results: list[Any]) -> list[Any]:
@@ -363,7 +364,7 @@ def filter_grade_as_date(text: str, results: list[Any]) -> list[Any]:
             if _GRADE_PATTERN.match(entity_text):
                 # Extract the integer part and check it's in grade range.
                 int_part = entity_text.split(".")[0].split("/")[0]
-                if int_part.isdigit() and int(int_part) <= 100:
+                if int_part.isdigit() and int(int_part) <= _MAX_GRADE_VALUE:
                     continue
         filtered.append(r)
     return filtered
