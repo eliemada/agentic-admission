@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import re
 import sys
 from dataclasses import dataclass, field
@@ -638,10 +637,17 @@ def anonymize_dossiers(
                 len(report.errors),
             )
 
-    # Write path mapping (gitignored — contains original names).
-    mapping_path = dst / ".path_mapping.json"
-    mapping_path.write_text(json.dumps(path_mapping, indent=2, ensure_ascii=False))
-    logger.info("Path mapping written to {}", mapping_path)
+    # Write path mapping as Parquet (gitignored — contains original names).
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    mapping_table = pa.table({
+        "anonymized_path": list(path_mapping.keys()),
+        "original_path": list(path_mapping.values()),
+    })
+    mapping_path = dst / "path_mapping.parquet"
+    pq.write_table(mapping_table, mapping_path)
+    logger.info("Path mapping written to {} ({} entries)", mapping_path, len(path_mapping))
 
     return report
 
