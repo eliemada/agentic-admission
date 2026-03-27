@@ -83,9 +83,10 @@ class TestSciperRecognizer:
 class TestBuildCustomRecognizers:
     """Tests for the factory function."""
 
-    def test_returns_two_recognizers(self) -> None:
+    def test_returns_three_recognizers(self) -> None:
         recs = build_custom_recognizers()
-        assert len(recs) == 2
+        assert len(recs) == 3
         types = {type(r).__name__ for r in recs}
         assert "AvsAhvRecognizer" in types
         assert "SciperRecognizer" in types
+        assert "PassportRecognizer" in types

@@ -6,6 +6,8 @@ AvsAhvRecognizer
     Swiss social security numbers (AVS/AHV) in format ``756.XXXX.XXXX.XX``.
 SciperRecognizer
     EPFL SCIPER student IDs (6-digit numbers with contextual keywords).
+PassportRecognizer
+    International passport numbers (1-2 uppercase letters + 6-9 digits).
 """
 
 from __future__ import annotations
@@ -67,10 +69,51 @@ class SciperRecognizer(PatternRecognizer):
 
 
 # ---------------------------------------------------------------------------
+# Passport recognizer
+# ---------------------------------------------------------------------------
+
+_PASSPORT_PATTERNS = [
+    Pattern(
+        name="passport_alpha",
+        regex=r"\b[A-Z]{1,2}\d{6,9}\b",
+        score=0.4,
+    ),
+]
+
+_PASSPORT_CONTEXT = [
+    "passport",
+    "passeport",
+    "document number",
+    "travel document",
+    "numéro de document",
+    "identity document",
+    "pièce d'identité",
+]
+
+
+class PassportRecognizer(PatternRecognizer):
+    """Detect international passport numbers.
+
+    Matches 1-2 uppercase letters followed by 6-9 digits.  The base score is
+    intentionally low (0.4) because many academic codes share this format
+    (e.g. ``CS250112``).  Confidence is boosted by contextual keywords like
+    ``passport`` or ``document number`` in the surrounding text.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            supported_entity="PASSPORT",
+            patterns=_PASSPORT_PATTERNS,
+            supported_language="en",
+            context=_PASSPORT_CONTEXT,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
 
 def build_custom_recognizers() -> list[PatternRecognizer]:
     """Return instances of all custom recognizers."""
-    return [AvsAhvRecognizer(), SciperRecognizer()]
+    return [AvsAhvRecognizer(), SciperRecognizer(), PassportRecognizer()]

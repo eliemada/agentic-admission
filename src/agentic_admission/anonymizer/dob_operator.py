@@ -13,7 +13,7 @@ from typing import Any
 from presidio_anonymizer.operators import Operator, OperatorType
 
 _YEAR_PATTERN = re.compile(r"\b((?:19|20)\d{2})\b")
-"""Match 4-digit years from 1900-2099 at word boundaries."""
+# Match 4-digit years from 1900-2099 at word boundaries.
 
 
 class DobYearOperator(Operator):

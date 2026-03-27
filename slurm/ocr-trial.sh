@@ -21,27 +21,28 @@ set -euo pipefail
 
 MAX_PDFS="${MAX_PDFS:-5}"
 VLLM_PORT=8001
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 cd "$PROJECT_DIR"
 mkdir -p slurm/logs
 
 # ---------------------------------------------------------------------------
-# 1. Load modules
+# 1. Clean environment — PyTorch/vLLM bundle their own CUDA runtime,
+#    so we avoid loading system CUDA modules that can conflict.
 # ---------------------------------------------------------------------------
 module purge
-module load gcc python cuda
 
 # ---------------------------------------------------------------------------
-# 2. Install dependencies
+# 2. Install dependencies (uv manages Python 3.12+)
 # ---------------------------------------------------------------------------
+export PATH="$HOME/.local/bin:$PATH"
 if ! command -v uv &> /dev/null; then
-    pip install --user uv
+    curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
 uv sync --frozen
 
-# vLLM is infra, not an app dependency — install it alongside
-pip install --user vllm
+# vLLM is infra, not an app dependency — install into the project venv
+uv pip install vllm
 
 # ---------------------------------------------------------------------------
 # 3. Pre-download model weights (uses HF cache on scratch)
@@ -54,21 +55,23 @@ uv run python -c "from huggingface_hub import snapshot_download; snapshot_downlo
 # 4. Start vLLM server in the background
 # ---------------------------------------------------------------------------
 echo "[$(date)] Starting vLLM server on port $VLLM_PORT ..."
-export VLLM_USE_V1=1
 uv run vllm serve reducto/RolmOCR \
     --port "$VLLM_PORT" \
     --max-model-len 4096 \
-    --gpu-memory-utilization 0.90 \
+    --gpu-memory-utilization 0.85 \
+    --enforce-eager \
+    --limit-mm-per-prompt '{"image": 1}' \
+    --mm-processor-kwargs '{"max_pixels": 512000}' \
     &
 
 VLLM_PID=$!
 echo "[$(date)] vLLM PID: $VLLM_PID"
 
 # Wait for vLLM to be ready (health endpoint)
-echo "[$(date)] Waiting for vLLM to start ..."
-for i in $(seq 1 60); do
+echo "[$(date)] Waiting for vLLM to start (may take 5-10 min on V100) ..."
+for i in $(seq 1 120); do
     if curl -sf "http://localhost:${VLLM_PORT}/health" > /dev/null 2>&1; then
-        echo "[$(date)] vLLM is ready after ~${i}s"
+        echo "[$(date)] vLLM is ready after ~$((i * 5))s"
         break
     fi
     if ! kill -0 "$VLLM_PID" 2>/dev/null; then
@@ -80,7 +83,7 @@ done
 
 # Verify it's actually up
 if ! curl -sf "http://localhost:${VLLM_PORT}/health" > /dev/null 2>&1; then
-    echo "[$(date)] ERROR: vLLM failed to start within 300s"
+    echo "[$(date)] ERROR: vLLM failed to start within 600s"
     kill "$VLLM_PID" 2>/dev/null || true
     exit 1
 fi

@@ -6,7 +6,9 @@ from agentic_admission.anonymizer.allow_lists import (
     ACADEMIC_TERMS,
     ACTIVITIES,
     ALL_CATEGORIES,
+    FORM_LABELS,
     INSTITUTIONS,
+    JOB_TITLES,
     LANGUAGES,
     PRONOUNS,
     TECHNICAL_TERMS,
@@ -35,8 +37,29 @@ class TestCategories:
     def test_arabic_in_languages(self) -> None:
         assert "Arabic" in LANGUAGES
 
+    def test_nom_in_form_labels(self) -> None:
+        assert "Nom" in FORM_LABELS
+
+    def test_prenom_in_form_labels(self) -> None:
+        assert "Prénom" in FORM_LABELS
+
+    def test_telephone_in_form_labels(self) -> None:
+        assert "Téléphone" in FORM_LABELS
+
+    def test_engineer_in_job_titles(self) -> None:
+        assert "Engineer" in JOB_TITLES
+
+    def test_coordinator_in_job_titles(self) -> None:
+        assert "Coordinator" in JOB_TITLES
+
+    def test_director_in_job_titles(self) -> None:
+        assert "Director" in JOB_TITLES
+
+    def test_btech_in_academic(self) -> None:
+        assert "B.Tech" in ACADEMIC_TERMS
+
     def test_all_categories_count(self) -> None:
-        assert len(ALL_CATEGORIES) == 6
+        assert len(ALL_CATEGORIES) == 8
 
     def test_no_empty_categories(self) -> None:
         for category in ALL_CATEGORIES:
@@ -79,6 +102,16 @@ class TestBuildAllowList:
         assert "German" in result
         assert "Arabic" in result
 
+    def test_form_labels_included(self) -> None:
+        result = build_allow_list()
+        assert "Nom" in result
+        assert "Prénom" in result
+
+    def test_job_titles_included(self) -> None:
+        result = build_allow_list()
+        assert "Engineer" in result
+        assert "Director" in result
+
     def test_all_categories_merged(self) -> None:
         result_set = set(build_allow_list())
         for category in (
@@ -88,5 +121,7 @@ class TestBuildAllowList:
             TECHNICAL_TERMS,
             ACTIVITIES,
             LANGUAGES,
+            FORM_LABELS,
+            JOB_TITLES,
         ):
             assert category.issubset(result_set)

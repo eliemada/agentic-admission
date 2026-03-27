@@ -22,6 +22,9 @@ dependencies = [
   "pyarrow>=23.0.1",
   "pydantic (>=2.10.0)",
   "pydantic-settings (>=2.7.0)",
+  "pymupdf>=1.27.2",
+  "en-core-web-sm>=3.8.0",
+  "streamlit>=1.55.0",
   "tenacity>=9.1.4",
 ]
 
@@ -42,6 +45,9 @@ dev = [
   "ty (>=0.0.14)",
   "typeguard (>=4.4.1)",
 ]
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
 [tool.coverage.report]  # https://coverage.readthedocs.io/en/latest/config.html#report
 fail_under = 40
@@ -209,6 +215,10 @@ type = "simple"
   [tool.poe.tasks.ingest]
   help = "Ingest dossiers from ZIP/TAR/directory into staging"
   cmd = "python -m agentic_admission.intake.adapter"
+
+  [tool.poe.tasks.dashboard]
+  help = "Open the dossier pipeline viewer"
+  cmd = "streamlit run dashboard/app.py --server.port 8501"
 
   [tool.poe.tasks.run]
   help = "Run the admission agent"

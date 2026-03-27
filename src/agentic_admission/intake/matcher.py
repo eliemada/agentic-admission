@@ -152,7 +152,7 @@ def name_to_folder_candidates(name: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 MatchResult = tuple[list[Dossier], list[Dossier], list[CandidateRecord]]
-"""``(matched_dossiers, unmatched_dossiers, unmatched_candidates)``."""
+# ``(matched_dossiers, unmatched_dossiers, unmatched_candidates)``.
 
 
 def match_dossiers_to_candidates(

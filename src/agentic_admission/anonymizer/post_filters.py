@@ -109,6 +109,30 @@ _COMMON_WORDS: frozenset[str] = frozenset(
         "might",
         "can",
         "could",
+        # Adjectives / nouns frequently misidentified as PERSON
+        "creative",
+        "first",
+        "second",
+        "third",
+        "last",
+        "next",
+        "name",
+        "student",
+        "students",
+        "member",
+        "members",
+        "intern",
+        "interns",
+        "volunteer",
+        "volunteers",
+        "madam",
+        "sir",
+        "mr",
+        "mrs",
+        "ms",
+        "miss",
+        "dr",
+        "prof",
     }
 )
 
@@ -308,6 +332,111 @@ def filter_duration_as_date(text: str, results: list[Any]) -> list[Any]:
     return filtered
 
 
+# Grade pattern: a number 0-100 optionally with decimals, optionally followed by /N.
+_GRADE_PATTERN = re.compile(r"^\d{1,3}(?:\.\d{1,2})?(?:/\d{1,3})?$")
+_MAX_GRADE_VALUE = 100
+
+
+def filter_grade_as_date(text: str, results: list[Any]) -> list[Any]:
+    """Drop DATE_TIME entities that are actually numeric grades.
+
+    Catches ``"14.08"``, ``"13.02"``, ``"85"``, ``"14.08/20"`` which are
+    academic scores misidentified as calendar dates (DD.MM format).
+
+    Only drops values where the integer part is 0-100 (valid grade range).
+
+    Parameters
+    ----------
+    text
+        Original text.
+    results
+        Presidio analyzer results.
+
+    Returns
+    -------
+    list
+        Results excluding grade-like DATE_TIME matches.
+    """
+    filtered = []
+    for r in results:
+        if r.entity_type == "DATE_TIME":
+            entity_text = text[r.start : r.end].strip()
+            if _GRADE_PATTERN.match(entity_text):
+                # Extract the integer part and check it's in grade range.
+                int_part = entity_text.split(".")[0].split("/")[0]
+                if int_part.isdigit() and int(int_part) <= _MAX_GRADE_VALUE:
+                    continue
+        filtered.append(r)
+    return filtered
+
+
+# Academic code pattern: known course/dept prefix + digits (not a passport).
+_ACADEMIC_CODE_PATTERN = re.compile(
+    r"^(?:CS|EE|ME|PH|MA|CH|MT|IN|SV|SIE|COM|GC|AR|MX|BE|BT|SE|IT|EC)\d+$"
+)
+
+
+def filter_academic_codes(text: str, results: list[Any]) -> list[Any]:
+    """Drop PASSPORT matches that are actually academic course codes.
+
+    Catches patterns like ``CS250112`` or ``EE310`` that share the passport
+    format (uppercase letters + digits) but are course identifiers.
+
+    Parameters
+    ----------
+    text
+        Original text.
+    results
+        Presidio analyzer results.
+
+    Returns
+    -------
+    list
+        Results excluding academic code false positives.
+    """
+    return [
+        r
+        for r in results
+        if r.entity_type != "PASSPORT"
+        or not _ACADEMIC_CODE_PATTERN.match(text[r.start : r.end])
+    ]
+
+
+# Pure-digit pattern: 7-13 digits with no phone formatting.
+_PURE_DIGITS_PATTERN = re.compile(r"^\d{7,13}$")
+
+# Entity types where pure-digit strings are likely misclassified.
+_NUMERIC_ID_ENTITY_TYPES: frozenset[str] = frozenset({"PHONE_NUMBER", "EMAIL_ADDRESS"})
+
+
+def filter_numeric_ids(text: str, results: list[Any]) -> list[Any]:
+    """Drop PHONE/EMAIL matches that are pure digit strings (application codes).
+
+    Catches administrative numeric codes like ``"2839273087"`` that get
+    misclassified as phone numbers or email addresses by pattern matchers.
+
+    Parameters
+    ----------
+    text
+        Original text.
+    results
+        Presidio analyzer results.
+
+    Returns
+    -------
+    list
+        Results excluding pure-digit misclassifications.
+    """
+    filtered = []
+    for r in results:
+        if r.entity_type in _NUMERIC_ID_ENTITY_TYPES:
+            entity_text = text[r.start : r.end].strip()
+            if _PURE_DIGITS_PATTERN.match(entity_text):
+                continue
+        filtered.append(r)
+    return filtered
+
+
 # ---------------------------------------------------------------------------
 # Pipeline composition
 # ---------------------------------------------------------------------------
@@ -349,6 +478,9 @@ def build_filter_pipeline(
         filter_by_length,
         filter_common_words,
         filter_duration_as_date,
+        filter_grade_as_date,
+        filter_numeric_ids,
+        filter_academic_codes,
     ]
 
 

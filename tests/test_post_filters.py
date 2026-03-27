@@ -13,6 +13,8 @@ from agentic_admission.anonymizer.post_filters import (
     filter_common_words,
     filter_duration_as_date,
     filter_excluded_entities,
+    filter_grade_as_date,
+    filter_numeric_ids,
     filter_partial_words,
 )
 from agentic_admission.anonymizer.thresholds import build_threshold_config
@@ -308,17 +310,186 @@ class TestFilterDurationAsDate:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# filter_numeric_ids
+# ---------------------------------------------------------------------------
+
+
+class TestFilterNumericIds:
+    """Tests for numeric application code filter."""
+
+    def test_drops_pure_digit_phone(self) -> None:
+        """Pure 10-digit string should NOT be classified as PHONE."""
+        text = "Code: 2839273087 here"
+        results: list[Any] = [FakeResult("PHONE_NUMBER", 6, 16, 0.7)]
+        filtered = filter_numeric_ids(text, results)
+        assert len(filtered) == 0
+
+    def test_keeps_real_phone_with_plus(self) -> None:
+        """Phone with + prefix should be kept."""
+        text = "Call +96104912018 please"
+        results: list[Any] = [FakeResult("PHONE_NUMBER", 5, 17, 0.9)]
+        filtered = filter_numeric_ids(text, results)
+        assert len(filtered) == 1
+
+    def test_keeps_real_phone_with_formatting(self) -> None:
+        """Phone with spaces/dashes should be kept."""
+        text = "Call +41 21 693 43 45 please"
+        results: list[Any] = [FakeResult("PHONE_NUMBER", 5, 21, 0.9)]
+        filtered = filter_numeric_ids(text, results)
+        assert len(filtered) == 1
+
+    def test_keeps_real_email(self) -> None:
+        """Real email should NOT be affected."""
+        text = "Mail rollaabiantoun@hotmail.com"
+        results: list[Any] = [FakeResult("EMAIL_ADDRESS", 5, 30, 0.9)]
+        filtered = filter_numeric_ids(text, results)
+        assert len(filtered) == 1
+
+    def test_drops_pure_digit_email(self) -> None:
+        """Pure digit string misclassified as EMAIL should be dropped."""
+        text = "Code 2839273087"
+        results: list[Any] = [FakeResult("EMAIL_ADDRESS", 5, 15, 0.6)]
+        filtered = filter_numeric_ids(text, results)
+        assert len(filtered) == 0
+
+    def test_ignores_non_phone_email_entities(self) -> None:
+        """PERSON entities with digits should not be affected."""
+        text = "Agent 007"
+        results: list[Any] = [FakeResult("PERSON", 6, 9, 0.5)]
+        filtered = filter_numeric_ids(text, results)
+        assert len(filtered) == 1
+
+
+# ---------------------------------------------------------------------------
+# filter_grade_as_date
+# ---------------------------------------------------------------------------
+
+
+class TestFilterGradeAsDate:
+    """Tests for grade-vs-date disambiguation filter."""
+
+    def test_drops_grade_14_08(self) -> None:
+        """14.08 is a grade on /20 scale, not August 14th."""
+        text = "Average: 14.08"
+        results: list[Any] = [FakeResult("DATE_TIME", 9, 14, 0.5)]
+        filtered = filter_grade_as_date(text, results)
+        assert len(filtered) == 0
+
+    def test_drops_grade_13_02(self) -> None:
+        """13.02 is a grade, not February 13th."""
+        text = "Score: 13.02"
+        results: list[Any] = [FakeResult("DATE_TIME", 7, 12, 0.5)]
+        filtered = filter_grade_as_date(text, results)
+        assert len(filtered) == 0
+
+    def test_drops_integer_grade(self) -> None:
+        """Pure integer '85' should be dropped as a grade."""
+        text = "Score: 85"
+        results: list[Any] = [FakeResult("DATE_TIME", 7, 9, 0.5)]
+        filtered = filter_grade_as_date(text, results)
+        assert len(filtered) == 0
+
+    def test_drops_grade_with_slash(self) -> None:
+        """'14.08/20' is clearly a grade."""
+        text = "Note: 14.08/20"
+        results: list[Any] = [FakeResult("DATE_TIME", 6, 14, 0.5)]
+        filtered = filter_grade_as_date(text, results)
+        assert len(filtered) == 0
+
+    def test_keeps_real_date(self) -> None:
+        """A proper date like '2020-05-15' should be kept."""
+        text = "Born 2020-05-15"
+        results: list[Any] = [FakeResult("DATE_TIME", 5, 15, 0.8)]
+        filtered = filter_grade_as_date(text, results)
+        assert len(filtered) == 1
+
+    def test_keeps_written_date(self) -> None:
+        """'June 2020' is a real date, not a grade."""
+        text = "Started June 2020"
+        results: list[Any] = [FakeResult("DATE_TIME", 8, 17, 0.7)]
+        filtered = filter_grade_as_date(text, results)
+        assert len(filtered) == 1
+
+    def test_ignores_non_date_entity(self) -> None:
+        """PERSON entities with numeric text should pass through."""
+        text = "Agent 14.08"
+        results: list[Any] = [FakeResult("PERSON", 6, 11, 0.5)]
+        filtered = filter_grade_as_date(text, results)
+        assert len(filtered) == 1
+
+    def test_drops_zero_grade(self) -> None:
+        """'0' should be treated as a valid grade."""
+        text = "Score: 0"
+        results: list[Any] = [FakeResult("DATE_TIME", 7, 8, 0.5)]
+        filtered = filter_grade_as_date(text, results)
+        assert len(filtered) == 0
+
+    def test_keeps_year_number(self) -> None:
+        """'2019' is a year, not a grade — too large to be a grade."""
+        text = "Year 2019"
+        results: list[Any] = [FakeResult("DATE_TIME", 5, 9, 0.7)]
+        filtered = filter_grade_as_date(text, results)
+        assert len(filtered) == 1
+
+
+class TestFilterCommonWordsExpanded:
+    """Tests for newly added common words that were causing over-redaction."""
+
+    def test_drops_creative_as_person(self) -> None:
+        text = "She is creative"
+        results: list[Any] = [FakeResult("PERSON", 7, 15, 0.5)]
+        filtered = filter_common_words(text, results)
+        assert len(filtered) == 0
+
+    def test_drops_first_as_person(self) -> None:
+        text = "the first semester"
+        results: list[Any] = [FakeResult("PERSON", 4, 9, 0.5)]
+        filtered = filter_common_words(text, results)
+        assert len(filtered) == 0
+
+    def test_drops_name_as_person(self) -> None:
+        text = "your name here"
+        results: list[Any] = [FakeResult("PERSON", 5, 9, 0.5)]
+        filtered = filter_common_words(text, results)
+        assert len(filtered) == 0
+
+    def test_drops_students_as_person(self) -> None:
+        text = "many students"
+        results: list[Any] = [FakeResult("PERSON", 5, 13, 0.5)]
+        filtered = filter_common_words(text, results)
+        assert len(filtered) == 0
+
+    def test_drops_madam_as_person(self) -> None:
+        text = "Dear Sir, Madam,"
+        results: list[Any] = [FakeResult("PERSON", 10, 15, 0.5)]
+        filtered = filter_common_words(text, results)
+        assert len(filtered) == 0
+
+    def test_drops_member_as_person(self) -> None:
+        text = "Board Member"
+        results: list[Any] = [FakeResult("PERSON", 6, 12, 0.5)]
+        filtered = filter_common_words(text, results)
+        assert len(filtered) == 0
+
+    def test_drops_intern_as_person(self) -> None:
+        text = "worked as Intern"
+        results: list[Any] = [FakeResult("PERSON", 10, 16, 0.5)]
+        filtered = filter_common_words(text, results)
+        assert len(filtered) == 0
+
+
 class TestBuildFilterPipeline:
     """Tests for pipeline composition."""
 
-    def test_returns_six_filters(self) -> None:
+    def test_returns_nine_filters(self) -> None:
         pipeline = build_filter_pipeline()
-        assert len(pipeline) == 6
+        assert len(pipeline) == 9
 
     def test_custom_threshold_config(self) -> None:
         config = build_threshold_config(overrides={"PERSON": 0.9})
         pipeline = build_filter_pipeline(threshold_config=config)
-        assert len(pipeline) == 6
+        assert len(pipeline) == 9
 
     def test_exclusion_filter_is_first(self) -> None:
         """The exclusion filter must run before all other filters."""

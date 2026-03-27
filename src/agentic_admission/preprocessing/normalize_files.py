@@ -31,14 +31,12 @@ _DOSSIER_ROOT = Path("data/raw/applications/dossiers")
 _OUTPUT_ROOT = Path("data/processed/dossiers")
 
 _MAGIC_TABLE: list[tuple[bytes, str]] = [(b"%PDF", ".pdf"), (b"PK\x03\x04", ".docx")]
-"""Magic-byte prefixes mapped to file extensions.
-
-``PK\\x03\\x04`` is the ZIP local-file header used by OOXML formats (docx, xlsx, pptx).
-For this dataset only ``.docx`` has been observed.
-"""
+# Magic-byte prefixes mapped to file extensions.
+# ``PK\x03\x04`` is the ZIP local-file header used by OOXML formats (docx, xlsx, pptx).
+# For this dataset only ``.docx`` has been observed.
 
 _MAGIC_READ_SIZE = 8
-"""Number of bytes to read for magic-byte detection."""
+# Number of bytes to read for magic-byte detection.
 
 
 # ---------------------------------------------------------------------------
