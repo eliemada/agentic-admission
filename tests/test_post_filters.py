@@ -320,8 +320,6 @@ class TestFilterNumericIds:
 
     def test_drops_pure_digit_phone(self) -> None:
         """Pure 10-digit string should NOT be classified as PHONE."""
-        from agentic_admission.anonymizer.post_filters import filter_numeric_ids
-
         text = "Code: 2839273087 here"
         results: list[Any] = [FakeResult("PHONE_NUMBER", 6, 16, 0.7)]
         filtered = filter_numeric_ids(text, results)
@@ -329,8 +327,6 @@ class TestFilterNumericIds:
 
     def test_keeps_real_phone_with_plus(self) -> None:
         """Phone with + prefix should be kept."""
-        from agentic_admission.anonymizer.post_filters import filter_numeric_ids
-
         text = "Call +96104912018 please"
         results: list[Any] = [FakeResult("PHONE_NUMBER", 5, 17, 0.9)]
         filtered = filter_numeric_ids(text, results)
@@ -338,8 +334,6 @@ class TestFilterNumericIds:
 
     def test_keeps_real_phone_with_formatting(self) -> None:
         """Phone with spaces/dashes should be kept."""
-        from agentic_admission.anonymizer.post_filters import filter_numeric_ids
-
         text = "Call +41 21 693 43 45 please"
         results: list[Any] = [FakeResult("PHONE_NUMBER", 5, 21, 0.9)]
         filtered = filter_numeric_ids(text, results)
@@ -347,8 +341,6 @@ class TestFilterNumericIds:
 
     def test_keeps_real_email(self) -> None:
         """Real email should NOT be affected."""
-        from agentic_admission.anonymizer.post_filters import filter_numeric_ids
-
         text = "Mail rollaabiantoun@hotmail.com"
         results: list[Any] = [FakeResult("EMAIL_ADDRESS", 5, 30, 0.9)]
         filtered = filter_numeric_ids(text, results)
@@ -356,8 +348,6 @@ class TestFilterNumericIds:
 
     def test_drops_pure_digit_email(self) -> None:
         """Pure digit string misclassified as EMAIL should be dropped."""
-        from agentic_admission.anonymizer.post_filters import filter_numeric_ids
-
         text = "Code 2839273087"
         results: list[Any] = [FakeResult("EMAIL_ADDRESS", 5, 15, 0.6)]
         filtered = filter_numeric_ids(text, results)
@@ -365,8 +355,6 @@ class TestFilterNumericIds:
 
     def test_ignores_non_phone_email_entities(self) -> None:
         """PERSON entities with digits should not be affected."""
-        from agentic_admission.anonymizer.post_filters import filter_numeric_ids
-
         text = "Agent 007"
         results: list[Any] = [FakeResult("PERSON", 6, 9, 0.5)]
         filtered = filter_numeric_ids(text, results)
@@ -494,14 +482,14 @@ class TestFilterCommonWordsExpanded:
 class TestBuildFilterPipeline:
     """Tests for pipeline composition."""
 
-    def test_returns_seven_filters(self) -> None:
+    def test_returns_nine_filters(self) -> None:
         pipeline = build_filter_pipeline()
-        assert len(pipeline) == 8
+        assert len(pipeline) == 9
 
     def test_custom_threshold_config(self) -> None:
         config = build_threshold_config(overrides={"PERSON": 0.9})
         pipeline = build_filter_pipeline(threshold_config=config)
-        assert len(pipeline) == 8
+        assert len(pipeline) == 9
 
     def test_exclusion_filter_is_first(self) -> None:
         """The exclusion filter must run before all other filters."""

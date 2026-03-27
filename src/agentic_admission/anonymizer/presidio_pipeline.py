@@ -16,6 +16,7 @@ Run standalone
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 from dataclasses import dataclass, field
@@ -53,6 +54,7 @@ _ENTITY_PLACEHOLDER_MAP: dict[str, str] = {
     "email": "<EMAIL>",
     "phone number": "<PHONE>",
     "passport number": "<PII>",
+    "PASSPORT": "<PII>",
     "social security number": "<PII>",
     "credit card number": "<PII>",
     "mobile phone number": "<PHONE>",
@@ -206,6 +208,69 @@ def _build_operators(entity_types: list[str]) -> dict[str, Any]:
     return operators
 
 
+# ---------------------------------------------------------------------------
+# Name propagation constants and helpers
+# ---------------------------------------------------------------------------
+
+_NAME_ENTITY_TYPES: frozenset[str] = frozenset({"PERSON", "person", "name"})
+_MIN_PROPAGATION_LEN = 3
+_PROPAGATED_SCORE = 0.85
+_INJECTED_SCORE = 0.95
+_MIN_NAME_LEN = 3
+
+
+def _make_person_result(start: int, end: int, score: float) -> Any:
+    """Create a synthetic PERSON RecognizerResult (or mock fallback)."""
+    try:
+        from presidio_analyzer import RecognizerResult
+
+        return RecognizerResult(entity_type="PERSON", start=start, end=end, score=score)
+    except ImportError:
+        from unittest.mock import MagicMock
+
+        result = MagicMock()
+        result.entity_type = "PERSON"
+        result.start = start
+        result.end = end
+        result.score = score
+        return result
+
+
+def _is_word_boundary(text: str, start: int, end: int) -> bool:
+    """Return True if the span [start:end] sits on word boundaries."""
+    if start > 0 and text[start - 1].isalnum():
+        return False
+    # Allow possessive 's after the match.
+    check_end = end
+    if (
+        check_end < len(text)
+        and text[check_end] in ("'", "\u2019")
+        and check_end + 1 < len(text)
+        and text[check_end + 1].lower() == "s"
+    ):
+        check_end += 2
+    return not (check_end < len(text) and text[check_end].isalnum())
+
+
+def _scan_and_add_matches(
+    text: str,
+    part: str,
+    score: float,
+    existing_spans: set[tuple[int, int]],
+    results: list[Any],
+) -> None:
+    """Scan *text* for *part* and append new PERSON results for unseen spans."""
+    pattern = re.compile(re.escape(part), re.IGNORECASE)
+    for match in pattern.finditer(text):
+        start, end = match.start(), match.end()
+        if (start, end) in existing_spans:
+            continue
+        if not _is_word_boundary(text, start, end):
+            continue
+        results.append(_make_person_result(start, end, score))
+        existing_spans.add((start, end))
+
+
 def _propagate_detected_names(text: str, results: list[Any]) -> list[Any]:
     """Find additional occurrences of already-detected names in *text*.
 
@@ -227,25 +292,16 @@ def _propagate_detected_names(text: str, results: list[Any]) -> list[Any]:
     """
     from agentic_admission.anonymizer.allow_lists import build_allow_list
 
-    _NAME_ENTITY_TYPES = frozenset({"PERSON", "person", "name"})
-    _MIN_PROPAGATION_LEN = 3
-    _PROPAGATED_SCORE = 0.85
-
     allow_set = frozenset(w.lower() for w in build_allow_list())
-
-    # Collect existing spans to avoid duplicates.
     existing_spans: set[tuple[int, int]] = {(r.start, r.end) for r in results}
 
-    # Collect unique name parts from detected PERSON/name entities.
     name_parts: set[str] = set()
     for r in results:
         if r.entity_type not in _NAME_ENTITY_TYPES:
             continue
         detected_text = text[r.start : r.end].strip()
-        # Add the full name.
         if len(detected_text) >= _MIN_PROPAGATION_LEN:
             name_parts.add(detected_text)
-        # Add individual words (e.g., "Rolla", "Antoun" from "Rolla Abi Antoun").
         for word in detected_text.split():
             if len(word) >= _MIN_PROPAGATION_LEN and word.lower() not in allow_set:
                 name_parts.add(word)
@@ -253,47 +309,56 @@ def _propagate_detected_names(text: str, results: list[Any]) -> list[Any]:
     if not name_parts:
         return results
 
-    # Scan text for all occurrences of each name part.
     new_results = list(results)
     for part in name_parts:
-        pattern = re.compile(re.escape(part), re.IGNORECASE)
-        for match in pattern.finditer(text):
-            start, end = match.start(), match.end()
-            if (start, end) in existing_spans:
-                continue
-            # Check word boundary (don't match inside longer words).
-            if start > 0 and text[start - 1].isalnum():
-                continue
-            # Allow possessive 's after the match.
-            check_end = end
-            if check_end < len(text) and text[check_end] in ("'", "\u2019"):
-                # Skip past 's
-                if check_end + 1 < len(text) and text[check_end + 1].lower() == "s":
-                    check_end += 2
-            if check_end < len(text) and text[check_end].isalnum():
-                continue
+        _scan_and_add_matches(
+            text, part, _PROPAGATED_SCORE, existing_spans, new_results,
+        )
 
-            try:
-                from presidio_analyzer import RecognizerResult
+    return new_results
 
-                new_result = RecognizerResult(
-                    entity_type="PERSON",
-                    start=start,
-                    end=end,
-                    score=_PROPAGATED_SCORE,
-                )
-            except ImportError:
-                # Fallback for test environments without presidio.
-                from unittest.mock import MagicMock
 
-                new_result = MagicMock()
-                new_result.entity_type = "PERSON"
-                new_result.start = start
-                new_result.end = end
-                new_result.score = _PROPAGATED_SCORE
+def _inject_candidate_name(
+    text: str, candidate_name: str, existing_results: list[Any]
+) -> list[Any]:
+    """Inject the candidate name from folder metadata as PII to redact.
 
-            new_results.append(new_result)
-            existing_spans.add((start, end))
+    Extracts name parts from the folder name (e.g. ``jaramillo_velez`` →
+    ``["jaramillo", "velez"]``), generates casing variants, and creates
+    synthetic ``RecognizerResult`` objects for every occurrence in *text*.
+
+    Parameters
+    ----------
+    text
+        Full document text.
+    candidate_name
+        Candidate folder name (underscore-separated, e.g. ``jaramillo_velez``).
+    existing_results
+        Results from the analyzer pass (used to avoid duplicate spans).
+
+    Returns
+    -------
+    list
+        Original results plus synthetic results for the candidate name.
+    """
+    from agentic_admission.anonymizer.allow_lists import build_allow_list
+
+    allow_set = frozenset(w.lower() for w in build_allow_list())
+    existing_spans: set[tuple[int, int]] = {(r.start, r.end) for r in existing_results}
+    new_results = list(existing_results)
+
+    raw_parts = candidate_name.replace("-", "_").split("_")
+    name_parts: set[str] = set()
+    for part in raw_parts:
+        if len(part) >= _MIN_NAME_LEN and part.lower() not in allow_set:
+            name_parts.add(part)
+
+    full_name = " ".join(raw_parts)
+    if len(full_name) >= _MIN_NAME_LEN:
+        name_parts.add(full_name)
+
+    for part in name_parts:
+        _scan_and_add_matches(text, part, _INJECTED_SCORE, existing_spans, new_results)
 
     return new_results
 
@@ -303,6 +368,7 @@ def anonymize_text(
     analyzer: Any,
     anonymizer: Any,
     *,
+    candidate_name: str | None = None,
     score_threshold: float | None = None,
     allow_list: list[str] | None = None,
     filter_pipeline: list[Any] | None = None,
@@ -317,6 +383,10 @@ def anonymize_text(
         A ``PresidioAnalyzerEngine`` instance.
     anonymizer
         A ``PresidioAnonymizerEngine`` instance.
+    candidate_name
+        Candidate folder name (e.g. ``jaramillo_velez``).  When provided,
+        all occurrences of name parts are forcibly redacted regardless of
+        NER confidence.
     score_threshold
         Minimum confidence for PII detection. Defaults to settings value.
     allow_list
@@ -345,6 +415,10 @@ def anonymize_text(
         text=text, language="en", score_threshold=threshold, allow_list=effective_allow_list
     )
 
+    # Inject candidate name from folder metadata BEFORE propagation.
+    if candidate_name:
+        results = _inject_candidate_name(text, candidate_name, results)
+
     if not results:
         return text, {}
 
@@ -368,6 +442,19 @@ def anonymize_text(
         counts[r.entity_type] = counts.get(r.entity_type, 0) + 1
 
     return anonymized.text, counts
+
+
+def _extract_candidate_name(file_path: Path) -> str | None:
+    """Extract the candidate folder name from a dossier file path.
+
+    Expects paths like ``texts/2024-25-spring/jaramillo_velez/9 - .../file.md``.
+    The candidate name is the directory two levels above the file.
+    """
+    # Path structure: semester / candidate / doc_folder / filename
+    parts = file_path.parts
+    if len(parts) >= 4:  # noqa: PLR2004
+        return parts[-3]
+    return None
 
 
 def anonymize_file(
@@ -396,12 +483,39 @@ def anonymize_file(
     if not text.strip():
         return {}
 
-    anon_text, counts = anonymize_text(text, analyzer, anonymizer)
+    candidate_name = _extract_candidate_name(input_path)
+    anon_text, counts = anonymize_text(text, analyzer, anonymizer, candidate_name=candidate_name)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(anon_text, encoding="utf-8")
 
     return counts
+
+
+def _hash_name(name: str) -> str:
+    """Return a short deterministic hash for a name string."""
+    return hashlib.sha256(name.encode()).hexdigest()[:12]
+
+
+def _anonymize_path(relative: Path) -> Path:
+    """Replace candidate name and filename PII with hashes.
+
+    Input:  ``2024-25-spring/jaramillo_velez/9 - Doc_F123/CV_Simon.md``
+    Output: ``2024-25-spring/a1b2c3d4e5f6/9 - Doc_F123/a1b2c3d4e5f6.md``
+
+    The semester is kept as-is.  The candidate folder is hashed.
+    The document subfolder is kept (contains no PII --- only doc type + hash).
+    The filename is hashed (often contains the candidate name).
+    """
+    parts = list(relative.parts)
+    if len(parts) >= 2:  # noqa: PLR2004
+        # parts[0] = semester, parts[1] = candidate folder
+        parts[1] = _hash_name(parts[1])
+    if len(parts) >= 1:
+        # Hash the filename (preserve .md extension)
+        stem = Path(parts[-1]).stem
+        parts[-1] = _hash_name(stem) + ".md"
+    return Path(*parts)
 
 
 def _should_skip(src_path: Path, dst_path: Path) -> bool:
@@ -475,10 +589,16 @@ def anonymize_dossiers(
     if sample is not None:
         md_files = md_files[:sample]
 
+    # Mapping from hashed paths to original paths (for traceability).
+    path_mapping: dict[str, str] = {}
+
     for md_path in md_files:
         report.total_files += 1
         relative = md_path.relative_to(src)
-        out_path = dst / relative
+        anon_relative = _anonymize_path(relative)
+        out_path = dst / anon_relative
+
+        path_mapping[str(anon_relative)] = str(relative)
 
         if not force and _should_skip(md_path, out_path):
             report.skipped += 1
@@ -499,6 +619,18 @@ def anonymize_dossiers(
                 report.total_pii_found,
                 len(report.errors),
             )
+
+    # Write path mapping as Parquet (gitignored — contains original names).
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    mapping_table = pa.table({
+        "anonymized_path": list(path_mapping.keys()),
+        "original_path": list(path_mapping.values()),
+    })
+    mapping_path = dst / "path_mapping.parquet"
+    pq.write_table(mapping_table, mapping_path)
+    logger.info("Path mapping written to {} ({} entries)", mapping_path, len(path_mapping))
 
     return report
 
