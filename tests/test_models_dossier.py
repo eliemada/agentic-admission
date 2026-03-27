@@ -6,7 +6,7 @@ from pathlib import PurePosixPath
 
 from agentic_admission.models.document import DocumentType, DossierDocument, classify_document
 from agentic_admission.models.dossier import Dossier, ProcessingStage
-from agentic_admission.models.evaluation import AgentEvaluation, AgentRole, PanelVerdict
+from agentic_admission.models.evaluation import AgentRole, AgentScorecard, Decision, PanelVerdict
 
 # ---------------------------------------------------------------------------
 # DocumentType classification
@@ -151,56 +151,46 @@ class TestDossier:
 
 
 class TestAgentEvaluation:
-    """Tests for AgentEvaluation and PanelVerdict models."""
+    """Tests for AgentScorecard and PanelVerdict models."""
 
-    def test_create_evaluation(self) -> None:
-        ev = AgentEvaluation(
-            role=AgentRole.STRICT,
-            decision="REJECT",
-            confidence=0.85,
-            reasoning="GPA below threshold for school quality C.",
-            scores={"academic": 3, "motivation": 5, "references": 4},
+    def test_create_scorecard(self) -> None:
+        card = AgentScorecard(
+            role=AgentRole.ACADEMIC,
+            scores={"academic_strength": 8, "institution_quality": 7},
+            justifications={"academic_strength": "Strong GPA from top-tier school."},
         )
-        assert ev.role == AgentRole.STRICT
-        assert ev.decision == "REJECT"
-        assert ev.confidence == 0.85
+        assert card.role == AgentRole.ACADEMIC
+        assert card.scores["academic_strength"] == 8
 
     def test_panel_verdict(self) -> None:
-        evals = [
-            AgentEvaluation(
-                role=AgentRole.STRICT,
-                decision="REJECT",
-                confidence=0.85,
-                reasoning="Weak GPA.",
-                scores={},
+        cards = (
+            AgentScorecard(
+                role=AgentRole.ACADEMIC,
+                scores={"academic_strength": 3},
+                justifications={"academic_strength": "Weak GPA."},
             ),
-            AgentEvaluation(
-                role=AgentRole.HOLISTIC,
-                decision="ACCEPT",
-                confidence=0.7,
-                reasoning="Strong motivation letter.",
-                scores={},
+            AgentScorecard(
+                role=AgentRole.MOTIVATION,
+                scores={"motivation_clarity": 8},
+                justifications={"motivation_clarity": "Strong motivation letter."},
             ),
-            AgentEvaluation(
-                role=AgentRole.TECHNICAL,
-                decision="WAITLIST",
-                confidence=0.6,
-                reasoning="Decent technical background.",
-                scores={},
-            ),
-        ]
-        verdict = PanelVerdict(
-            evaluations=evals,
-            final_decision="WAITLIST",
-            report="The panel is split. Recommending waitlist for further review.",
-            moderator_reasoning="2 out of 3 lean toward giving the candidate a chance.",
         )
-        assert verdict.final_decision == "WAITLIST"
-        assert len(verdict.evaluations) == 3
+        verdict = PanelVerdict(
+            candidate_id="2024-25_round1_10",
+            scorecards=cards,
+            debates=(),
+            final_scores={"academic_strength": 3, "motivation_clarity": 8},
+            composite_score=5.5,
+            decision=Decision.WAITLIST,
+            justification="The panel is split. Recommending waitlist for further review.",
+        )
+        assert verdict.decision == Decision.WAITLIST
+        assert len(verdict.scorecards) == 2
 
     def test_agent_roles(self) -> None:
         roles = {r.value for r in AgentRole}
-        assert "strict" in roles
-        assert "holistic" in roles
-        assert "technical" in roles
-        assert "moderator" in roles
+        assert "academic" in roles
+        assert "reference" in roles
+        assert "motivation" in roles
+        assert "devils_advocate" in roles
+        assert "chair" in roles
