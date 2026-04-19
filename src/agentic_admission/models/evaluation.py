@@ -31,6 +31,21 @@ class Decision(Enum):
     WAITLIST = "waitlist"
 
 
+class DimensionJustification(BaseModel, frozen=True):
+    """Structured pros/cons for a single scoring dimension.
+
+    Attributes
+    ----------
+    pros
+        Positive observations (2-5 bullet points).
+    cons
+        Negative observations or concerns (0-5 bullet points).
+    """
+
+    pros: tuple[str, ...]
+    cons: tuple[str, ...]
+
+
 class AgentScorecard(BaseModel, frozen=True):
     """One specialist agent's evaluation of a candidate.
 
@@ -41,12 +56,12 @@ class AgentScorecard(BaseModel, frozen=True):
     scores
         Dimension name to integer score (1-10).
     justifications
-        Dimension name to 1-2 sentence justification.
+        Dimension name to structured pros/cons justification.
     """
 
     role: AgentRole
     scores: dict[str, int]
-    justifications: dict[str, str]
+    justifications: dict[str, DimensionJustification]
 
     @model_validator(mode="after")
     def _validate_scores(self) -> Self:
@@ -112,6 +127,21 @@ class DebateTranscript(BaseModel, frozen=True):
     entries: tuple[DebateEntry, ...]
 
 
+class VerdictSummary(BaseModel, frozen=True):
+    """Structured pros/cons summary for the final verdict.
+
+    Attributes
+    ----------
+    pros
+        Key strengths supporting admission (2-5 bullet points).
+    cons
+        Key concerns or weaknesses (0-5 bullet points).
+    """
+
+    pros: tuple[str, ...]
+    cons: tuple[str, ...]
+
+
 class PanelVerdict(BaseModel, frozen=True):
     """Final output of the deliberation protocol for one candidate.
 
@@ -130,7 +160,7 @@ class PanelVerdict(BaseModel, frozen=True):
     decision
         Accept, reject, or waitlist.
     justification
-        Chair's 2-3 sentence justification.
+        Structured pros/cons summary from the Chair.
     """
 
     candidate_id: str
@@ -139,7 +169,7 @@ class PanelVerdict(BaseModel, frozen=True):
     final_scores: dict[str, int]
     composite_score: float
     decision: Decision
-    justification: str
+    justification: VerdictSummary
 
     @model_validator(mode="after")
     def _validate_scores(self) -> Self:

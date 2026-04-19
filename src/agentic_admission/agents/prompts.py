@@ -10,31 +10,21 @@ from agentic_admission.models.evaluation import AgentRole
 # ---------------------------------------------------------------------------
 
 _WRITING_DIRECTIVE = (
-    "\n\n## Writing rules for justifications\n"
-    "Your justifications will be read by admission committee members. Write prose "
-    "that sounds like a sharp colleague, not a language model.\n\n"
-    "DO:\n"
-    "- Lead with the verdict, then the evidence. No throat-clearing.\n"
-    "- Name specifics: courses, grades, institutions, dates. Vague praise is "
-    "worth nothing.\n"
-    "- Use active voice. The candidate did X. The professor wrote Y. "
-    "Never 'it is demonstrated that' or 'the transcript reveals.'\n"
-    "- Vary sentence length. Mix short declarative sentences with longer ones "
-    "that carry detail.\n"
-    "- State your point once. Trust the reader.\n\n"
-    "DO NOT:\n"
-    "- Use adverbs: no 'genuinely,' 'truly,' 'deeply,' 'fundamentally,' "
-    "'remarkably,' 'notably,' 'importantly,' 'significantly.'\n"
-    "- Use filler phrases: no 'it is worth noting,' 'here is the thing,' "
-    "'at its core,' 'the reality is,' 'this matters because.'\n"
-    "- Use binary contrasts: no 'not X, but Y.' State Y.\n"
-    "- Use false agency: transcripts do not 'reveal.' Letters do not "
-    "'demonstrate.' People write, score, achieve.\n"
-    "- Use em dashes.\n"
-    "- Stack three-item lists for rhetorical effect.\n"
-    "- Hedge with 'somewhat,' 'relatively,' 'to some extent.'\n"
-    "- End with a punchy one-liner summary. Your last sentence should carry "
-    "new information, not repeat what you already said.\n"
+    "\n\n## Output format for justifications\n"
+    "Your justifications will be read by admission committee members who need "
+    "to skim many candidates quickly.\n\n"
+    "FORMAT: For each scoring dimension, provide a JSON object with two arrays:\n"
+    '  {"pros": ["...", "..."], "cons": ["...", "..."]}\n\n'
+    "RULES:\n"
+    "- Each bullet: one concrete fact, one sentence. No adjectives, no filler.\n"
+    "- Name specifics: courses, grades, institutions, dates.\n"
+    "- 2-5 pros, 0-5 cons per dimension.\n"
+    "- Active voice. The candidate did X. The professor wrote Y.\n"
+    "- No adverbs (genuinely, truly, deeply, remarkably, significantly).\n"
+    "- No filler phrases (it is worth noting, at its core, the reality is).\n"
+    "- No hedging (somewhat, relatively, to some extent).\n"
+    "- No em dashes. No rhetorical three-item lists.\n"
+    "- If there are no cons, return an empty array.\n"
 )
 
 AGENT_PROMPTS: dict[AgentRole, str] = {
@@ -50,8 +40,8 @@ AGENT_PROMPTS: dict[AgentRole, str] = {
         "Consider the grading scale provided. A 3.5/4.0 from a competitive US school "
         "is different from a 14/20 in the French system. Normalize your assessment "
         "accordingly.\n\n"
-        "Respond with a JSON object matching the AgentScorecard schema. Include a "
-        "1-2 sentence justification for each dimension score."
+        "Respond with a JSON object matching the AgentScorecard schema. For each "
+        "dimension, provide pros and cons as bullet-point arrays."
         + _WRITING_DIRECTIVE
     ),
     AgentRole.REFERENCE: (

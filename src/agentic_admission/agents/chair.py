@@ -17,6 +17,7 @@ from agentic_admission.models.evaluation import (
     DebateTranscript,
     Decision,
     PanelVerdict,
+    VerdictSummary,
 )
 
 if TYPE_CHECKING:
@@ -101,7 +102,8 @@ class ChairSynthesis(BaseModel, frozen=True):
     risk_flags: int
     consistency: int
     decision: Decision
-    justification: str
+    pros: tuple[str, ...]
+    cons: tuple[str, ...]
 
 
 class DebateArgument(BaseModel, frozen=True):
@@ -137,10 +139,15 @@ def _format_scorecards(scorecards: tuple[AgentScorecard, ...]) -> str:
     """
     sections: list[str] = []
     for card in scorecards:
-        lines = [f"### {card.role.value.upper()}"]
+        lines: list[str] = [f"### {card.role.value.upper()}"]
         for dim, score in card.scores.items():
-            justification = card.justifications.get(dim, "")
-            lines.append(f"- {dim}: {score}/10 — {justification}")
+            lines.append(f"- {dim}: {score}/10")
+            justification = card.justifications.get(dim)
+            if justification is not None:
+                for pro in justification.pros:
+                    lines.append(f"  + {pro}")
+                for con in justification.cons:
+                    lines.append(f"  - {con}")
         sections.append("\n".join(lines))
     return "\n\n".join(sections)
 
@@ -330,7 +337,8 @@ async def synthesize(
                 "institution_quality, reference_quality, calibration_confidence, "
                 "motivation_clarity, program_fit, risk_flags, consistency\n"
                 "- decision: one of 'accept', 'reject', or 'waitlist'\n"
-                "- justification: 2-3 sentence justification\n\n"
+                "- pros: array of 2-5 bullet points summarising key strengths\n"
+                "- cons: array of 0-5 bullet points summarising concerns\n\n"
                 "NOTE: The composite score is computed automatically using these "
                 f"weights: {weight_description}. Academic credentials and "
                 "reference quality carry the most weight. A strong transcript "
@@ -369,5 +377,5 @@ async def synthesize(
         final_scores=final_scores,
         composite_score=composite,
         decision=synthesis.decision,
-        justification=synthesis.justification,
+        justification=VerdictSummary(pros=synthesis.pros, cons=synthesis.cons),
     )
