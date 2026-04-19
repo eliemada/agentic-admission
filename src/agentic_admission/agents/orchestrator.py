@@ -14,7 +14,8 @@ from agentic_admission.agents.evaluators import (
     evaluate_motivation,
     evaluate_reference,
 )
-from agentic_admission.models.evaluation import DebateTranscript, PanelVerdict
+from agentic_admission.agents.minor_advisor import recommend_minor
+from agentic_admission.models.evaluation import DebateTranscript, MinorRecommendation, PanelVerdict
 
 _CLIENT_TIMEOUT: float = 120.0
 
@@ -95,10 +96,28 @@ async def evaluate_candidate(
         devils_task = evaluate_devils_advocate(
             full_dossier_text=full_dossier_text, model=model, base_url=base_url, client=client
         )
-
-        scorecards = tuple(
-            await asyncio.gather(academic_task, reference_task, motivation_task, devils_task)
+        minor_task = recommend_minor(
+            transcript_text=transcript_text,
+            cv_text=cv_text,
+            model=model,
+            base_url=base_url,
+            client=client,
         )
+
+        # Run all 5 tasks in parallel (4 evaluators + minor advisor)
+        results = await asyncio.gather(
+            academic_task, reference_task, motivation_task, devils_task, minor_task,
+            return_exceptions=True,
+        )
+
+        # Separate scorecards from minor recommendation
+        scorecards = tuple(r for r in results[:4] if not isinstance(r, BaseException))
+        minor_result = results[4]
+        minor_rec: MinorRecommendation | None = (
+            minor_result if isinstance(minor_result, MinorRecommendation) else None
+        )
+        if isinstance(minor_result, BaseException):
+            logger.warning("Minor recommendation failed: {}", minor_result)
 
         # --- Phase 2: Disagreement detection ---
         logger.info("Phase 2: Disagreement detection for {}", candidate_id)
@@ -132,7 +151,7 @@ async def evaluate_candidate(
         # --- Phase 4: Final synthesis ---
         logger.info("Phase 4: Final synthesis for {}", candidate_id)
 
-        return await synthesize(
+        verdict = await synthesize(
             candidate_id=candidate_id,
             scorecards=scorecards,
             debates=debates,
@@ -140,3 +159,17 @@ async def evaluate_candidate(
             base_url=base_url,
             client=client,
         )
+
+        # Attach minor recommendation to the verdict
+        if minor_rec is not None:
+            return PanelVerdict(
+                candidate_id=verdict.candidate_id,
+                scorecards=verdict.scorecards,
+                debates=verdict.debates,
+                final_scores=verdict.final_scores,
+                composite_score=verdict.composite_score,
+                decision=verdict.decision,
+                justification=verdict.justification,
+                minor_recommendation=minor_rec,
+            )
+        return verdict

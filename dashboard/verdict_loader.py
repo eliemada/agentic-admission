@@ -239,6 +239,7 @@ def load_verdict(path: Path) -> dict | None:
         },
         "final_scores": final_scores,
         "documents": sorted(doc_types),
+        "minor_recommendation": data.get("minor_recommendation"),
     }
 
 

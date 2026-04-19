@@ -589,11 +589,24 @@ for candidate in filtered_candidates:
         if gpa_display
         else ""
     )
+    # Minor recommendation badge
+    minor_rec = candidate.get("minor_recommendation")
+    minor_badge = ""
+    if minor_rec and isinstance(minor_rec, dict):
+        primary = minor_rec.get("primary_minor", "")
+        if primary:
+            minor_badge = (
+                f'<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;'
+                f'border-radius:12px;font-size:0.7rem;font-weight:600;">'
+                f"Minor: {_html_escape(primary)}</span>"
+            )
+
     card_header = (
         f'<div class="candidate-card" style="{border_style}">'
         f'<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">'
         f'<strong style="font-size:1.05rem;">{display_name}</strong>'
         f"{badge}"
+        f"{minor_badge}"
         f"{school_span}"
         f"{gpa_span}"
         f"{committee_badge}"
@@ -665,6 +678,36 @@ for candidate in filtered_candidates:
                     st.markdown(f":red[-] {_html_escape(con)}")
                 if not mod_cons:
                     st.markdown("_None identified_")
+
+            # Minor recommendation
+            if minor_rec and isinstance(minor_rec, dict):
+                recommended = minor_rec.get("recommended", [])
+                if recommended:
+                    st.markdown("**Recommended Minors**")
+                    minor_cols = st.columns(len(recommended))
+                    for j, rec in enumerate(recommended):
+                        with minor_cols[j]:
+                            m_name = rec.get("minor_name", "")
+                            m_section = rec.get("section_code", "")
+                            m_score = rec.get("fit_score", 0)
+                            m_reason = rec.get("reasoning", "")
+                            rank_label = ["1st", "2nd", "3rd"][j] if j < 3 else f"{j + 1}th"
+                            score_color = _confidence_color(m_score / 10.0)
+                            st.markdown(
+                                f'<div class="agent-card">'
+                                f'<div class="agent-role">{rank_label} choice</div>'
+                                f'<div style="margin:0.4rem 0;">'
+                                f'<strong>{_html_escape(m_name)}</strong> '
+                                f'<span style="color:#64748b;">({m_section})</span>'
+                                f"</div>"
+                                f'<div style="font-size:0.85rem;">Fit: '
+                                f'<span style="color:{score_color};font-weight:700;">'
+                                f"{m_score}/10</span></div>"
+                                f'<div style="font-size:0.8rem;color:#475569;'
+                                f'margin-top:0.3rem;">{_html_escape(m_reason)}</div>'
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
 
             # Per-agent evaluations
             agent_cols = st.columns(len(candidate.get("evaluations", [])) or 1)

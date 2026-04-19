@@ -144,10 +144,8 @@ def _format_scorecards(scorecards: tuple[AgentScorecard, ...]) -> str:
             lines.append(f"- {dim}: {score}/10")
             justification = card.justifications.get(dim)
             if justification is not None:
-                for pro in justification.pros:
-                    lines.append(f"  + {pro}")
-                for con in justification.cons:
-                    lines.append(f"  - {con}")
+                lines.extend(f"  + {pro}" for pro in justification.pros)
+                lines.extend(f"  - {con}" for con in justification.cons)
         sections.append("\n".join(lines))
     return "\n\n".join(sections)
 

@@ -142,6 +142,42 @@ class VerdictSummary(BaseModel, frozen=True):
     cons: tuple[str, ...]
 
 
+class MinorScore(BaseModel, frozen=True):
+    """Fit score for a single minor.
+
+    Attributes
+    ----------
+    minor_name
+        Official minor name.
+    section_code
+        Owning section code.
+    fit_score
+        How well the candidate's background fits this minor (1-10).
+    reasoning
+        One-sentence justification.
+    """
+
+    minor_name: str
+    section_code: str
+    fit_score: int
+    reasoning: str
+
+
+class MinorRecommendation(BaseModel, frozen=True):
+    """LLM-generated minor recommendation for a candidate.
+
+    Attributes
+    ----------
+    recommended
+        Top 3 minors ranked by fit.
+    primary_minor
+        Name of the top-ranked minor.
+    """
+
+    recommended: tuple[MinorScore, ...]
+    primary_minor: str
+
+
 class PanelVerdict(BaseModel, frozen=True):
     """Final output of the deliberation protocol for one candidate.
 
@@ -161,6 +197,8 @@ class PanelVerdict(BaseModel, frozen=True):
         Accept, reject, or waitlist.
     justification
         Structured pros/cons summary from the Chair.
+    minor_recommendation
+        Recommended minor(s) based on transcript and CV analysis.
     """
 
     candidate_id: str
@@ -170,6 +208,7 @@ class PanelVerdict(BaseModel, frozen=True):
     composite_score: float
     decision: Decision
     justification: VerdictSummary
+    minor_recommendation: MinorRecommendation | None = None
 
     @model_validator(mode="after")
     def _validate_scores(self) -> Self:
