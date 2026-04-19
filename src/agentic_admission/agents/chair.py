@@ -27,20 +27,21 @@ _MAX_DEBATE_ROUNDS = 2
 
 
 SCORING_WEIGHTS: dict[str, float] = {
-    "academic_strength": 0.20,
+    "academic_strength": 0.25,
     "institution_quality": 0.15,
     "reference_quality": 0.15,
     "calibration_confidence": 0.10,
-    "motivation_clarity": 0.10,
-    "program_fit": 0.10,
-    "risk_flags": 0.10,
-    "consistency": 0.10,
+    "motivation_clarity": 0.05,
+    "program_fit": 0.05,
+    "risk_flags": 0.05,
+    "consistency": 0.05,
 }
 """Explicit scoring weights for the composite score.
 
-Academic credentials and reference quality dominate (50% combined).
-Motivation and devil's-advocate dimensions are secondary signals — a weak
-motivation letter should not sink an academically strong candidate.
+Academic credentials and reference quality dominate (55% combined).
+Motivation, fit, risk, and consistency are minor tiebreakers (20% combined)
+— they should never override a strong academic profile.
+Calibration confidence (10%) modulates how much to trust reference scores.
 """
 
 
