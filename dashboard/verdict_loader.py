@@ -38,16 +38,31 @@ def _parse_scores(raw: dict | str) -> dict[str, int]:
     return {}
 
 
-def _parse_justifications(raw: dict | str) -> dict[str, str]:
-    """Parse justifications that may be a dict or a Python repr string."""
-    if isinstance(raw, dict):
-        return {k: str(v) for k, v in raw.items()}
+def _parse_justifications(raw: dict | str) -> dict[str, dict[str, list[str]]]:
+    """Parse justifications that may be structured pros/cons or legacy strings.
+
+    Returns a dict mapping dimension name to {"pros": [...], "cons": [...]}.
+    Handles both new structured format and legacy single-string format.
+    """
     if isinstance(raw, str) and raw.startswith("{"):
         try:
-            return {k: str(v) for k, v in ast.literal_eval(raw).items()}
+            raw = ast.literal_eval(raw)
         except (ValueError, SyntaxError):
             return {}
-    return {}
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, dict[str, list[str]]] = {}
+    for dim, val in raw.items():
+        if isinstance(val, dict) and ("pros" in val or "cons" in val):
+            result[dim] = {
+                "pros": list(val.get("pros", [])),
+                "cons": list(val.get("cons", [])),
+            }
+        elif isinstance(val, str):
+            result[dim] = {"pros": [val] if val else [], "cons": []}
+        else:
+            result[dim] = {"pros": [], "cons": []}
+    return result
 
 
 def _parse_role(raw: str) -> str:
@@ -70,7 +85,11 @@ def _extract_institution_from_scorecard(scorecard: dict) -> str:
     if role != "academic":
         return ""
     justifications = _parse_justifications(scorecard.get("justifications", {}))
-    return justifications.get("institution_quality", "")
+    inst = justifications.get("institution_quality", {})
+    if isinstance(inst, dict):
+        pros = inst.get("pros", [])
+        return pros[0] if pros else ""
+    return str(inst) if inst else ""
 
 
 def _scorecard_to_evaluation(scorecard: dict) -> dict:
@@ -78,10 +97,6 @@ def _scorecard_to_evaluation(scorecard: dict) -> dict:
     role_key = _parse_role(scorecard.get("role", ""))
     scores = _parse_scores(scorecard.get("scores", {}))
     justifications = _parse_justifications(scorecard.get("justifications", {}))
-
-    # Build reasoning from justifications
-    reasoning_parts = [f"**{dim}:** {text}" for dim, text in justifications.items()]
-    reasoning = " ".join(reasoning_parts) if reasoning_parts else "No reasoning available."
 
     # Determine per-agent decision based on scores
     avg_score = sum(scores.values()) / len(scores) if scores else 5
@@ -96,7 +111,7 @@ def _scorecard_to_evaluation(scorecard: dict) -> dict:
         "role": _ROLE_DISPLAY.get(role_key, role_key),
         "decision": agent_decision,
         "confidence": min(avg_score / 10.0, 1.0),
-        "reasoning": reasoning,
+        "justifications": justifications,
         "scores": scores,
         "document_references": [],
     }
@@ -124,7 +139,16 @@ def load_verdict(path: Path) -> dict | None:
     decision = _parse_decision(data.get("decision", "reject"))
     status = _DECISION_TO_STATUS.get(decision, "pending")
     composite = data.get("composite_score", 0.0)
-    justification = data.get("justification", "")
+    raw_justification = data.get("justification", "")
+    if isinstance(raw_justification, dict):
+        verdict_pros = list(raw_justification.get("pros", []))
+        verdict_cons = list(raw_justification.get("cons", []))
+    elif isinstance(raw_justification, str):
+        verdict_pros = [raw_justification] if raw_justification else []
+        verdict_cons = []
+    else:
+        verdict_pros = []
+        verdict_cons = []
 
     # Extract GPA data if present
     gpa_data = data.get("gpa", {})
@@ -200,20 +224,22 @@ def load_verdict(path: Path) -> dict | None:
         "gpa_confidence": gpa_confidence,
         "study_level": "",
         "gender": "",
-        "summary": justification,
+        "verdict_pros": verdict_pros,
+        "verdict_cons": verdict_cons,
         "status": status,
         "confidence": min(composite / 10.0, 1.0),
         "evaluations": evaluations,
         "debates": parsed_debates,
         "moderator": {
-            "report": (
-                f"{debate_summary}"
-                f"**Final verdict: {decision.upper()}** (composite: {composite:.1f}/10). "
-                f"{justification}"
-            ),
+            "pros": verdict_pros,
+            "cons": verdict_cons,
+            "decision": decision.upper(),
+            "composite": composite,
+            "debate_summary": debate_summary,
         },
         "final_scores": final_scores,
         "documents": sorted(doc_types),
+        "minor_recommendation": data.get("minor_recommendation"),
     }
 
 
