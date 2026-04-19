@@ -104,15 +104,19 @@ async def evaluate_candidate(
             client=client,
         )
 
-        # Run all 5 tasks in parallel (4 evaluators + minor advisor)
-        results = await asyncio.gather(
-            academic_task, reference_task, motivation_task, devils_task, minor_task,
-            return_exceptions=True,
+        # Run evaluators and minor advisor in parallel.
+        # Evaluators must succeed; minor advisor is best-effort.
+        scorecards_task = asyncio.gather(
+            academic_task, reference_task, motivation_task, devils_task,
         )
+        minor_wrapped = asyncio.gather(minor_task, return_exceptions=True)
 
-        # Separate scorecards from minor recommendation
-        scorecards = tuple(r for r in results[:4] if not isinstance(r, BaseException))
-        minor_result = results[4]
+        scorecard_list, minor_results = await asyncio.gather(
+            scorecards_task, minor_wrapped,
+        )
+        scorecards = tuple(scorecard_list)
+
+        minor_result = minor_results[0]
         minor_rec: MinorRecommendation | None = (
             minor_result if isinstance(minor_result, MinorRecommendation) else None
         )

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from agentic_admission.agents.llm_client import ChatMessage, complete
 from agentic_admission.agents.prompts import AGENT_PROMPTS
-from agentic_admission.models.evaluation import AgentRole, AgentScorecard
+from agentic_admission.models.evaluation import AgentRole, AgentScorecard, DimensionJustification
 
 if TYPE_CHECKING:
     import httpx
@@ -75,16 +76,37 @@ def _response_to_scorecard(role: AgentRole, response: BaseModel) -> AgentScoreca
     """
     data = response.model_dump()
     scores: dict[str, int] = {}
-    justifications: dict[str, str] = {}
+    justifications: dict[str, DimensionJustification] = {}
 
     for key, value in data.items():
         if key.endswith("_justification"):
             dim = key.removesuffix("_justification")
-            justifications[dim] = str(value)
+            justifications[dim] = _parse_justification(str(value))
         else:
             scores[key] = int(value)
 
     return AgentScorecard(role=role, scores=scores, justifications=justifications)
+
+
+def _parse_justification(raw: str) -> DimensionJustification:
+    """Parse a justification string into structured pros/cons.
+
+    The LLM may return either a JSON object with pros/cons arrays
+    or a plain text string. Handles both formats.
+    """
+    raw = raw.strip()
+    if raw.startswith("{"):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict) and ("pros" in parsed or "cons" in parsed):
+                return DimensionJustification(
+                    pros=tuple(parsed.get("pros", ())),
+                    cons=tuple(parsed.get("cons", ())),
+                )
+        except json.JSONDecodeError:
+            pass
+    # Fallback: treat entire string as a single pro
+    return DimensionJustification(pros=(raw,) if raw else (), cons=())
 
 
 async def evaluate_academic(
