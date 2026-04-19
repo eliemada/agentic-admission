@@ -31,6 +31,7 @@ async def evaluate_candidate(
     full_dossier_text: str,
     model: str,
     base_url: str,
+    api_key: str = "",
 ) -> PanelVerdict:
     """Run the full 4-phase deliberation protocol for a single candidate.
 
@@ -59,13 +60,17 @@ async def evaluate_candidate(
         LLM model identifier.
     base_url
         vLLM endpoint base URL.
+    api_key
+        Optional API key for cloud endpoints (OpenRouter, etc.).
+        When empty, no Authorization header is sent (for local vLLM).
 
     Returns
     -------
     PanelVerdict
         The final scorecard, recommendation, and justification.
     """
-    async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT, headers=headers) as client:
         # --- Phase 1: Independent evaluation (4 agents in parallel) ---
         logger.info("Phase 1: Independent evaluation for {}", candidate_id)
 

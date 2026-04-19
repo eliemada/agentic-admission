@@ -4,12 +4,87 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel
+
 from agentic_admission.agents.llm_client import ChatMessage, complete
 from agentic_admission.agents.prompts import AGENT_PROMPTS
 from agentic_admission.models.evaluation import AgentRole, AgentScorecard
 
 if TYPE_CHECKING:
     import httpx
+
+
+# ---------------------------------------------------------------------------
+# Typed response models — explicit fields so the LLM knows what to produce
+# ---------------------------------------------------------------------------
+
+
+class AcademicResponse(BaseModel, frozen=True):
+    """Response schema for the Academic Evaluator."""
+
+    academic_strength: int
+    academic_strength_justification: str
+    institution_quality: int
+    institution_quality_justification: str
+
+
+class ReferenceResponse(BaseModel, frozen=True):
+    """Response schema for the Reference Letter Specialist."""
+
+    reference_quality: int
+    reference_quality_justification: str
+    calibration_confidence: int
+    calibration_confidence_justification: str
+
+
+class MotivationResponse(BaseModel, frozen=True):
+    """Response schema for the Motivation & Fit Evaluator."""
+
+    motivation_clarity: int
+    motivation_clarity_justification: str
+    program_fit: int
+    program_fit_justification: str
+
+
+class DevilsAdvocateResponse(BaseModel, frozen=True):
+    """Response schema for the Devil's Advocate."""
+
+    risk_flags: int
+    risk_flags_justification: str
+    consistency: int
+    consistency_justification: str
+
+
+def _response_to_scorecard(role: AgentRole, response: BaseModel) -> AgentScorecard:
+    """Convert a typed response to an AgentScorecard.
+
+    Extracts fields ending in ``_justification`` as justifications and
+    the corresponding integer fields as scores.
+
+    Parameters
+    ----------
+    role
+        The agent role.
+    response
+        The typed response model.
+
+    Returns
+    -------
+    AgentScorecard
+        A scorecard with scores and justifications dicts.
+    """
+    data = response.model_dump()
+    scores: dict[str, int] = {}
+    justifications: dict[str, str] = {}
+
+    for key, value in data.items():
+        if key.endswith("_justification"):
+            dim = key.removesuffix("_justification")
+            justifications[dim] = str(value)
+        else:
+            scores[key] = int(value)
+
+    return AgentScorecard(role=role, scores=scores, justifications=justifications)
 
 
 async def evaluate_academic(
@@ -37,16 +112,14 @@ async def evaluate_academic(
         ChatMessage(role="system", content=AGENT_PROMPTS[AgentRole.ACADEMIC]),
         ChatMessage(role="user", content=f"Evaluate this candidate:\n\n{transcript_text}"),
     ]
-    scorecard = await complete(
+    response = await complete(
         messages=messages,
-        response_model=AgentScorecard,
+        response_model=AcademicResponse,
         model=model,
         base_url=base_url,
         client=client,
     )
-    return AgentScorecard(
-        role=AgentRole.ACADEMIC, scores=scorecard.scores, justifications=scorecard.justifications
-    )
+    return _response_to_scorecard(AgentRole.ACADEMIC, response)
 
 
 async def evaluate_reference(
@@ -82,23 +155,21 @@ async def evaluate_reference(
     """
     user_content = (
         f"## Candidate's Reference Letters\n\n{letters_text}\n\n"
-        f"## Calibration Profile\n\n{calibration_context}\n\n"
-        f"## Historical Letters for Comparison\n\n{historical_letters}"
+        f"## Calibration Profile\n\n{calibration_context or '(not available)'}\n\n"
+        f"## Historical Letters for Comparison\n\n{historical_letters or '(not available)'}"
     )
     messages = [
         ChatMessage(role="system", content=AGENT_PROMPTS[AgentRole.REFERENCE]),
         ChatMessage(role="user", content=user_content),
     ]
-    scorecard = await complete(
+    response = await complete(
         messages=messages,
-        response_model=AgentScorecard,
+        response_model=ReferenceResponse,
         model=model,
         base_url=base_url,
         client=client,
     )
-    return AgentScorecard(
-        role=AgentRole.REFERENCE, scores=scorecard.scores, justifications=scorecard.justifications
-    )
+    return _response_to_scorecard(AgentRole.REFERENCE, response)
 
 
 async def evaluate_motivation(
@@ -134,16 +205,14 @@ async def evaluate_motivation(
         ChatMessage(role="system", content=AGENT_PROMPTS[AgentRole.MOTIVATION]),
         ChatMessage(role="user", content=user_content),
     ]
-    scorecard = await complete(
+    response = await complete(
         messages=messages,
-        response_model=AgentScorecard,
+        response_model=MotivationResponse,
         model=model,
         base_url=base_url,
         client=client,
     )
-    return AgentScorecard(
-        role=AgentRole.MOTIVATION, scores=scorecard.scores, justifications=scorecard.justifications
-    )
+    return _response_to_scorecard(AgentRole.MOTIVATION, response)
 
 
 async def evaluate_devils_advocate(
@@ -171,15 +240,11 @@ async def evaluate_devils_advocate(
         ChatMessage(role="system", content=AGENT_PROMPTS[AgentRole.DEVILS_ADVOCATE]),
         ChatMessage(role="user", content=f"Review this complete dossier:\n\n{full_dossier_text}"),
     ]
-    scorecard = await complete(
+    response = await complete(
         messages=messages,
-        response_model=AgentScorecard,
+        response_model=DevilsAdvocateResponse,
         model=model,
         base_url=base_url,
         client=client,
     )
-    return AgentScorecard(
-        role=AgentRole.DEVILS_ADVOCATE,
-        scores=scorecard.scores,
-        justifications=scorecard.justifications,
-    )
+    return _response_to_scorecard(AgentRole.DEVILS_ADVOCATE, response)

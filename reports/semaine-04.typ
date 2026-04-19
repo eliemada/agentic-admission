@@ -6,7 +6,7 @@
   etudiant: "Elie Bruno",
   superviseur: "Prof. Gaétan de Rassenfosse",
   resume: [
-    Suite au feedback du Prof. de Rassenfosse, l'anonymisation a été
+    Suite au feedback reçu, l'anonymisation a été
     calibrée pour préserver les signaux utiles à la décision d'admission
     (année de naissance, localisation, langues, institutions) tout en
     continuant à masquer les vrais PII. Validé sur 6 documents
@@ -44,11 +44,11 @@
 
 = Travail effectué
 
-== Feedback Prof. de Rassenfosse
+== Feedback sur l'anonymisation
 
-L'anonymisation de la semaine 3 était fonctionnelle mais *trop agressive*
-pour un usage en décision d'admission. Quatre points spécifiques ont été
-soulevés :
+Suite au feedback, l'anonymisation de la semaine 3 était fonctionnelle
+mais *trop agressive* pour un usage en décision d'admission. Quatre
+points spécifiques ont été soulevés :
 
 + *Date de naissance* : l'âge est un critère de rejet, il faut garder
   l'année de naissance

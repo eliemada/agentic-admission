@@ -15,6 +15,7 @@ from agentic_admission.models.evaluation import (
     Conflict,
     DebateEntry,
     DebateTranscript,
+    Decision,
     PanelVerdict,
 )
 
@@ -22,6 +23,56 @@ if TYPE_CHECKING:
     import httpx
 
 _MAX_DEBATE_ROUNDS = 2
+
+
+class ChairSynthesis(BaseModel, frozen=True):
+    """Lightweight response model for the Chair's final synthesis.
+
+    Uses explicit named fields so the LLM knows exactly what to produce.
+
+    Attributes
+    ----------
+    academic_strength
+        Final score for academic strength (1-10).
+    institution_quality
+        Final score for institution quality (1-10).
+    reference_quality
+        Final score for reference quality (1-10).
+    calibration_confidence
+        Final score for calibration confidence (1-10).
+    motivation_clarity
+        Final score for motivation clarity (1-10).
+    program_fit
+        Final score for program fit (1-10).
+    risk_flags
+        Final score for risk flags (1-10, inverse: 10 = no concerns).
+    consistency
+        Final score for dossier consistency (1-10).
+    composite_score
+        Weighted average of all scores (1.0-10.0).
+    decision
+        Accept, reject, or waitlist.
+    justification
+        2-3 sentence justification.
+    """
+
+    academic_strength: int
+    institution_quality: int
+    reference_quality: int
+    calibration_confidence: int
+    motivation_clarity: int
+    program_fit: int
+    risk_flags: int
+    consistency: int
+    composite_score: float
+    decision: Decision
+    justification: str
+
+
+class DebateArgument(BaseModel, frozen=True):
+    """A single agent's argument in a debate round."""
+
+    argument: str
 
 
 class DisagreementReport(BaseModel, frozen=True):
@@ -168,21 +219,21 @@ async def moderate_debate(
                         f"Question: {conflict.debate_question}\n\n"
                         f"Context:\n{context}\n\n"
                         f"Prior arguments:\n{prior_args}\n\n"
-                        "Defend or adjust your position. Respond with an AgentScorecard."
+                        "Defend or adjust your position on this dimension. "
+                        "Provide a concise argument (2-4 sentences)."
                     ),
                 ),
             ]
             response = await complete(
                 messages=messages,
-                response_model=AgentScorecard,
+                response_model=DebateArgument,
                 model=model,
                 base_url=base_url,
                 client=client,
             )
-            justification = response.justifications.get(
-                conflict.dimension, next(iter(response.justifications.values()), "")
+            entries.append(
+                DebateEntry(role=role, round_number=round_num, argument=response.argument)
             )
-            entries.append(DebateEntry(role=role, round_number=round_num, argument=justification))
 
     logger.info("Debate on '{}' completed: {} entries", conflict.dimension, len(entries))
     return DebateTranscript(conflict_dimension=conflict.dimension, entries=tuple(entries))
@@ -234,26 +285,44 @@ async def synthesize(
         ChatMessage(
             role="user",
             content=(
-                "Produce the FINAL VERDICT for this candidate. Return a PanelVerdict with "
-                "all 8 dimension scores, composite_score, decision, and justification.\n\n"
+                "Produce the FINAL VERDICT for this candidate.\n\n"
+                "Return a JSON with:\n"
+                "- final_scores: dict of 8 dimension names to integer scores (1-10)\n"
+                "  Dimensions: academic_strength, institution_quality, reference_quality, "
+                "calibration_confidence, motivation_clarity, program_fit, risk_flags, consistency\n"
+                "- composite_score: weighted average as a float (1.0-10.0)\n"
+                "- decision: one of 'accept', 'reject', or 'waitlist'\n"
+                "- justification: 2-3 sentence justification\n\n"
                 f"## Specialist Scorecards\n\n{formatted_cards}\n\n"
                 f"## Debate Transcripts\n\n{debate_text or '(no debates needed)'}"
             ),
         ),
     ]
-    verdict = await complete(
+    synthesis = await complete(
         messages=messages,
-        response_model=PanelVerdict,
+        response_model=ChairSynthesis,
         model=model,
         base_url=base_url,
         client=client,
     )
+
+    final_scores = {
+        "academic_strength": synthesis.academic_strength,
+        "institution_quality": synthesis.institution_quality,
+        "reference_quality": synthesis.reference_quality,
+        "calibration_confidence": synthesis.calibration_confidence,
+        "motivation_clarity": synthesis.motivation_clarity,
+        "program_fit": synthesis.program_fit,
+        "risk_flags": synthesis.risk_flags,
+        "consistency": synthesis.consistency,
+    }
+
     return PanelVerdict(
         candidate_id=candidate_id,
         scorecards=scorecards,
         debates=debates,
-        final_scores=verdict.final_scores,
-        composite_score=verdict.composite_score,
-        decision=verdict.decision,
-        justification=verdict.justification,
+        final_scores=final_scores,
+        composite_score=synthesis.composite_score,
+        decision=synthesis.decision,
+        justification=synthesis.justification,
     )

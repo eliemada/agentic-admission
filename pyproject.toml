@@ -26,6 +26,8 @@ dependencies = [
   "en-core-web-sm>=3.8.0",
   "streamlit>=1.55.0",
   "tenacity>=9.1.4",
+  "zeroentropy>=0.1.0a11",
+  "openai>=1.60.0",
 ]
 
 [project.scripts]
@@ -219,6 +221,36 @@ type = "simple"
   [tool.poe.tasks.dashboard]
   help = "Open the dossier pipeline viewer"
   cmd = "streamlit run dashboard/app.py --server.port 8501"
+
+  [tool.poe.tasks.review]
+  help = "Open the admission review dashboard"
+  cmd = "streamlit run dashboard/review.py --server.port 8502"
+
+  [tool.poe.tasks.calibrate-ingest]
+  help = "Upload anonymized reference letters to zsearch"
+  cmd = "python -m agentic_admission.calibration.ingest"
+
+  [tool.poe.tasks.calibrate-profiles]
+  help = "Generate cultural calibration profiles from historical letters"
+  cmd = "python -m agentic_admission.calibration.profiler"
+
+  [tool.poe.tasks.calibrate]
+  help = "Run full calibration pipeline (ingest + profiles)"
+
+    [[tool.poe.tasks.calibrate.sequence]]
+    cmd = "python -m agentic_admission.calibration.ingest"
+
+    [[tool.poe.tasks.calibrate.sequence]]
+    cmd = "python -m agentic_admission.calibration.profiler"
+
+  [tool.poe.tasks.evaluate]
+  help = "Run E2E admission evaluation on anonymized dossiers"
+  shell = "python -m agentic_admission.agents.run_evaluation ${evaluate_args}"
+
+    [tool.poe.tasks.evaluate.args.evaluate_args]
+    positional = true
+    multiple = true
+    default = ""
 
   [tool.poe.tasks.run]
   help = "Run the admission agent"

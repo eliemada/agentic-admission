@@ -25,9 +25,8 @@ class Settings(BaseSettings):
         Minimum confidence for PII detection (0.0-1.0).
     gliner_model : str
         GLiNER model ID for zero-shot NER in Presidio.
-    anonymizer_excluded_entities : frozenset[str]
-        Entity types to preserve (not anonymize). Parsed from comma-separated
-        env var at startup.
+    anonymizer_excluded_entities_raw : str
+        Entity types to preserve (not anonymize), comma-separated.
     """
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -39,16 +38,31 @@ class Settings(BaseSettings):
     vlm_base_url: str = "http://localhost:8001/v1"
     presidio_score_threshold: float = 0.5
     gliner_model: str = "knowledgator/gliner-multitask-large-v0.5"
-    anonymizer_excluded_entities: frozenset[str] = frozenset(
-        {"LOCATION", "address", "NRP", "organization", "ORGANIZATION"}
-    )
+    anonymizer_excluded_entities_raw: str = "LOCATION,address,NRP,organization,ORGANIZATION"
 
-    @field_validator("anonymizer_excluded_entities", mode="before")
-    @classmethod
-    def _parse_excluded_entities(cls, v: object) -> frozenset[str]:
-        if isinstance(v, str):
-            return frozenset(e.strip() for e in v.split(",") if e.strip())
-        return frozenset(v)  # type: ignore[arg-type]
+    # Zero Entropy API for letter retrieval
+    zeroentropy_api_key: str = ""
+    zeroentropy_collection: str = "mte-reference-letters"
+
+    # OpenRouter for calibration profile generation
+    openrouter_api_key: str = ""
+    openrouter_model: str = "anthropic/claude-sonnet-4"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+
+    # Calibration profiles output directory
+    calibration_profiles_dir: str = "data/processed/calibration_profiles"
+
+    # Evaluation output directory
+    evaluation_output_dir: str = "data/processed/evaluations"
+
+    @property
+    def anonymizer_excluded_entities(self) -> frozenset[str]:
+        """Parse comma-separated entity types into a frozenset."""
+        return frozenset(
+            e.strip()
+            for e in self.anonymizer_excluded_entities_raw.split(",")
+            if e.strip()
+        )
 
 
 settings = Settings()
