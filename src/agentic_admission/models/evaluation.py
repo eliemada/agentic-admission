@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import types
 from enum import Enum
 from typing import Self
 
@@ -50,16 +49,12 @@ class AgentScorecard(BaseModel, frozen=True):
     justifications: dict[str, str]
 
     @model_validator(mode="after")
-    def _validate_and_freeze(self) -> Self:
-        """Enforce 1-10 score range and freeze dict fields."""
+    def _validate_scores(self) -> Self:
+        """Enforce 1-10 score range."""
         for dim, val in self.scores.items():
             if not (_MIN_SCORE <= val <= _MAX_SCORE):
                 msg = f"Score for '{dim}' must be 1-10, got {val}"
                 raise ValueError(msg)
-        object.__setattr__(self, "scores", types.MappingProxyType(dict(self.scores)))
-        object.__setattr__(
-            self, "justifications", types.MappingProxyType(dict(self.justifications))
-        )
         return self
 
 
@@ -147,8 +142,8 @@ class PanelVerdict(BaseModel, frozen=True):
     justification: str
 
     @model_validator(mode="after")
-    def _validate_and_freeze(self) -> Self:
-        """Enforce 1-10 score range on final_scores/composite and freeze dict."""
+    def _validate_scores(self) -> Self:
+        """Enforce 1-10 score range on final_scores and composite."""
         for dim, val in self.final_scores.items():
             if not (_MIN_SCORE <= val <= _MAX_SCORE):
                 msg = f"Score for '{dim}' must be 1-10, got {val}"
@@ -156,5 +151,4 @@ class PanelVerdict(BaseModel, frozen=True):
         if not (_MIN_COMPOSITE <= self.composite_score <= _MAX_COMPOSITE):
             msg = f"composite_score must be 1.0-10.0, got {self.composite_score}"
             raise ValueError(msg)
-        object.__setattr__(self, "final_scores", types.MappingProxyType(dict(self.final_scores)))
         return self

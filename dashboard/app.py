@@ -4,7 +4,7 @@ Interactive dashboard showing the PDF → Markdown → Anonymized pipeline
 for MTE admission dossiers at EPFL.
 
 Run with:
-    uv run streamlit run dashboard/app.py
+    uv run poe dashboard
 """
 
 from __future__ import annotations
@@ -50,12 +50,11 @@ def _highlight_pii(text: str) -> str:
 
     def _replace(match: re.Match[str]) -> str:
         tag = match.group(1)
-        # Strip detail suffix (e.g., DOB_1995 → DOB)
         base_tag = tag.split("_")[0] if "_" in tag else tag
         color = _PII_COLORS.get(base_tag, _PII_COLORS["PII"])
         return (
             f'<span style="background-color:{color};color:white;'
-            f'padding:2px 6px;border-radius:4px;font-size:0.85em;'
+            f"padding:2px 6px;border-radius:4px;font-size:0.85em;"
             f'font-weight:600;letter-spacing:0.02em;">'
             f"&lt;{tag}&gt;</span>"
         )
@@ -79,14 +78,12 @@ def _count_pii_tags(text: str) -> dict[str, int]:
 
 
 def _list_semesters() -> list[str]:
-    """Return sorted semester directories present in the text root."""
     if not _TEXT_ROOT.exists():
         return []
     return sorted(d.name for d in _TEXT_ROOT.iterdir() if d.is_dir())
 
 
 def _list_candidates(semester: str) -> list[str]:
-    """Return sorted candidate directories for a semester."""
     sem_dir = _TEXT_ROOT / semester
     if not sem_dir.exists():
         return []
@@ -94,7 +91,6 @@ def _list_candidates(semester: str) -> list[str]:
 
 
 def _list_documents(semester: str, candidate: str) -> list[str]:
-    """Return sorted document directories for a candidate."""
     cand_dir = _TEXT_ROOT / semester / candidate
     if not cand_dir.exists():
         return []
@@ -102,12 +98,17 @@ def _list_documents(semester: str, candidate: str) -> list[str]:
 
 
 def _find_file(root: Path, semester: str, candidate: str, document: str, ext: str) -> Path | None:
-    """Find first file with given extension in the document directory."""
     doc_dir = root / semester / candidate / document
     if not doc_dir.exists():
         return None
     files = list(doc_dir.glob(f"*{ext}"))
     return files[0] if files else None
+
+
+def _doc_label(name: str) -> str:
+    """Strip the hash suffix for cleaner display."""
+    match = re.match(r"(\d+ - .+?)_[BF]\d+$", name)
+    return match.group(1) if match else name
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +119,7 @@ st.set_page_config(
     page_title="MTE Admission — Dossier Viewer",
     page_icon="🎓",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ---------------------------------------------------------------------------
@@ -128,13 +129,31 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-    /* Clean header */
-    .main .block-container { padding-top: 2rem; max-width: 100%; }
+    .main .block-container {
+        padding-top: 1rem;
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+        max-width: 100%;
+    }
 
-    /* Sidebar styling */
-    [data-testid="stSidebar"] { background-color: #0f172a; }
-    [data-testid="stSidebar"] * { color: #e2e8f0 !important; }
-    [data-testid="stSidebar"] .stSelectbox label { color: #94a3b8 !important; font-weight: 600; }
+    /* Navigation bar */
+    .nav-bar {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.8rem 1.2rem;
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+    .nav-bar .brand {
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: white;
+        white-space: nowrap;
+        margin-right: 0.5rem;
+    }
 
     /* Panel headers */
     .panel-header {
@@ -145,131 +164,96 @@ st.markdown(
         color: #64748b;
         padding-bottom: 0.5rem;
         border-bottom: 2px solid #e2e8f0;
-        margin-bottom: 1rem;
+        margin-bottom: 0.75rem;
     }
 
-    /* Markdown panel */
+    /* Text panels */
     .md-panel {
         background: #f8fafc;
         border: 1px solid #e2e8f0;
         border-radius: 8px;
         padding: 1.5rem;
-        height: 75vh;
+        height: 800px;
         overflow-y: auto;
         font-size: 0.9rem;
         line-height: 1.7;
-    }
-
-    /* Stat cards */
-    .stat-card {
-        background: linear-gradient(135deg, #1e293b, #334155);
-        border-radius: 12px;
-        padding: 1.2rem;
-        text-align: center;
-        color: white;
-    }
-    .stat-card .number {
-        font-size: 2rem;
-        font-weight: 800;
-        line-height: 1;
-    }
-    .stat-card .label {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: #94a3b8;
-        margin-top: 0.3rem;
     }
 
     /* PII legend */
     .pii-legend {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.5rem;
+        gap: 0.4rem;
         margin-top: 0.5rem;
     }
     .pii-badge {
-        padding: 3px 10px;
+        padding: 2px 8px;
         border-radius: 4px;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         font-weight: 600;
         color: white;
     }
 
-    /* Hide Streamlit branding */
+    /* Hide Streamlit chrome */
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
     header { visibility: hidden; }
+
+    /* Make selectboxes inline-friendly */
+    .stSelectbox { min-width: 0; }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
 # ---------------------------------------------------------------------------
-# Sidebar — Navigation
+# Top navigation bar (replaces sidebar)
 # ---------------------------------------------------------------------------
 
-with st.sidebar:
-    st.markdown("## 🎓 MTE Admission")
-    st.markdown("##### Dossier Pipeline Viewer")
-    st.markdown("---")
+semesters = _list_semesters()
+if not semesters:
+    st.error("No data found. Check `data/processed/texts/`.")
+    st.stop()
 
-    semesters = _list_semesters()
-    if not semesters:
-        st.error("No data found. Check `data/processed/texts/`.")
-        st.stop()
+nav_cols = st.columns([2, 2, 4, 2])
 
-    semester = st.selectbox("Semester", semesters, index=0)
+with nav_cols[0]:
+    semester = st.selectbox("Semester", semesters, index=0, label_visibility="collapsed")
 
-    candidates = _list_candidates(semester)
-    if not candidates:
-        st.warning("No candidates for this semester.")
-        st.stop()
+candidates = _list_candidates(semester)
+if not candidates:
+    st.warning("No candidates for this semester.")
+    st.stop()
 
+with nav_cols[1]:
     candidate = st.selectbox(
         "Candidate",
         candidates,
         index=0,
         format_func=lambda x: x.replace("_", " ").title(),
+        label_visibility="collapsed",
     )
 
-    documents = _list_documents(semester, candidate)
-    if not documents:
-        st.warning("No documents for this candidate.")
-        st.stop()
+documents = _list_documents(semester, candidate)
+if not documents:
+    st.warning("No documents for this candidate.")
+    st.stop()
 
-    # Clean up document names for display
-    def _doc_label(name: str) -> str:
-        """Strip the hash suffix for cleaner display."""
-        match = re.match(r"(\d+ - .+?)_[BF]\d+$", name)
-        return match.group(1) if match else name
-
+with nav_cols[2]:
     document = st.selectbox(
         "Document",
         documents,
         index=0,
         format_func=_doc_label,
+        label_visibility="collapsed",
     )
 
-    st.markdown("---")
-
-    # Quick stats
-    text_count = sum(1 for _ in _TEXT_ROOT.rglob("*.md")) if _TEXT_ROOT.exists() else 0
-    anon_count = sum(1 for _ in _ANON_ROOT.rglob("*.md")) if _ANON_ROOT.exists() else 0
-
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(
-            f'<div class="stat-card"><div class="number">{text_count:,}</div>'
-            f'<div class="label">Extracted</div></div>',
-            unsafe_allow_html=True,
-        )
-    with c2:
-        st.markdown(
-            f'<div class="stat-card"><div class="number">{anon_count:,}</div>'
-            f'<div class="label">Anonymized</div></div>',
-            unsafe_allow_html=True,
-        )
+# Title
+with nav_cols[3]:
+    st.markdown(
+        f"**{candidate.replace('_', ' ').title()}**",
+        help=f"{semester} — {_doc_label(document)}",
+    )
 
 # ---------------------------------------------------------------------------
 # Resolve files
@@ -280,78 +264,133 @@ text_path = _find_file(_TEXT_ROOT, semester, candidate, document, ".md")
 anon_path = _find_file(_ANON_ROOT, semester, candidate, document, ".md")
 
 # ---------------------------------------------------------------------------
-# Header
+# View mode selector
 # ---------------------------------------------------------------------------
 
-st.markdown(
-    f"### {candidate.replace('_', ' ').title()} — "
-    f"*{_doc_label(document)}*"
+view_mode = st.radio(
+    "View",
+    ["Split View", "PDF Focus", "Comparison"],
+    horizontal=True,
+    label_visibility="collapsed",
 )
 
 # ---------------------------------------------------------------------------
-# Three-column layout
+# PDF rendering helper
 # ---------------------------------------------------------------------------
 
-col_pdf, col_text, col_anon = st.columns([1, 1, 1], gap="medium")
 
-# --- PDF column ---
-with col_pdf:
-    st.markdown('<div class="panel-header">📄 Original PDF</div>', unsafe_allow_html=True)
-    if pdf_path and pdf_path.exists():
-        pdf_bytes = pdf_path.read_bytes()
-        b64 = base64.b64encode(pdf_bytes).decode()
-        pdf_html = (
-            f'<iframe src="data:application/pdf;base64,{b64}" '
-            f'width="100%" height="75vh" style="border:1px solid #e2e8f0;'
-            f'border-radius:8px;" type="application/pdf"></iframe>'
-        )
-        st.markdown(pdf_html, unsafe_allow_html=True)
-    else:
-        st.info("PDF not available locally. Sync from cluster to view.")
+def _render_pdf(path: Path) -> None:
+    """Render PDF pages as images using PyMuPDF for reliable display."""
+    import fitz  # PyMuPDF
 
-# --- Markdown column ---
-with col_text:
-    st.markdown(
-        '<div class="panel-header">📝 Extracted Markdown</div>',
-        unsafe_allow_html=True,
-    )
-    if text_path and text_path.exists():
-        text_content = text_path.read_text(encoding="utf-8")
+    doc = fitz.open(str(path))
+    for i, page in enumerate(doc):
+        # Render at 2x for crisp display
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        img_bytes = pix.tobytes("png")
+        st.image(img_bytes, use_container_width=True, caption=f"Page {i + 1} of {len(doc)}")
+    doc.close()
+
+
+def _render_text(path: Path) -> None:
+    """Render a markdown file using native Streamlit markdown in a scrollable container."""
+    content = path.read_text(encoding="utf-8")
+    with st.container(height=810):
+        st.markdown(content)
+
+
+def _render_anon(path: Path) -> None:
+    """Render an anonymized markdown file with PII highlighting."""
+    content = path.read_text(encoding="utf-8")
+    highlighted = _highlight_pii(content)
+    with st.container(height=810):
+        st.markdown(highlighted, unsafe_allow_html=True)
+
+    # PII stats
+    pii_counts = _count_pii_tags(content)
+    if pii_counts:
+        total = sum(pii_counts.values())
+        legend = f'<div style="margin-top:0.5rem;font-size:0.8rem;color:#475569;"><strong>{total} PII entities</strong></div>'
+        legend += '<div class="pii-legend">'
+        for tag, count in pii_counts.items():
+            color = _PII_COLORS.get(tag, _PII_COLORS["PII"])
+            legend += f'<span class="pii-badge" style="background:{color};">{tag}: {count}</span>'
+        legend += "</div>"
+        st.markdown(legend, unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# Layout rendering
+# ---------------------------------------------------------------------------
+
+if view_mode == "Split View":
+    col_pdf, col_text, col_anon = st.columns([1, 1, 1], gap="medium")
+
+    with col_pdf:
+        st.markdown('<div class="panel-header">📄 Original PDF</div>', unsafe_allow_html=True)
+        if pdf_path and pdf_path.exists():
+            with st.container(height=810):
+                _render_pdf(pdf_path)
+        else:
+            st.info("PDF not available locally.")
+
+    with col_text:
+        st.markdown('<div class="panel-header">📝 Extracted Text</div>', unsafe_allow_html=True)
+        if text_path and text_path.exists():
+            _render_text(text_path)
+        else:
+            st.info("Text not extracted.")
+
+    with col_anon:
+        st.markdown('<div class="panel-header">🔒 Anonymized</div>', unsafe_allow_html=True)
+        if anon_path and anon_path.exists():
+            _render_anon(anon_path)
+        else:
+            st.info("Not yet anonymized.")
+
+elif view_mode == "PDF Focus":
+    col_pdf, col_right = st.columns([3, 2], gap="medium")
+
+    with col_pdf:
+        st.markdown('<div class="panel-header">📄 Original PDF</div>', unsafe_allow_html=True)
+        if pdf_path and pdf_path.exists():
+            with st.container(height=810):
+                _render_pdf(pdf_path)
+        else:
+            st.info("PDF not available locally.")
+
+    with col_right:
+        tab_text, tab_anon = st.tabs(["📝 Extracted Text", "🔒 Anonymized"])
+        with tab_text:
+            if text_path and text_path.exists():
+                _render_text(text_path)
+            else:
+                st.info("Text not extracted.")
+        with tab_anon:
+            if anon_path and anon_path.exists():
+                _render_anon(anon_path)
+            else:
+                st.info("Not yet anonymized.")
+
+elif view_mode == "Comparison":
+    col_left, col_right = st.columns([1, 1], gap="medium")
+
+    with col_left:
         st.markdown(
-            f'<div class="md-panel">{text_content}</div>',
+            '<div class="panel-header">📝 Extracted Text (Original)</div>',
             unsafe_allow_html=True,
         )
-    else:
-        st.info("Text not extracted for this document.")
+        if text_path and text_path.exists():
+            _render_text(text_path)
+        else:
+            st.info("Text not extracted.")
 
-# --- Anonymized column ---
-with col_anon:
-    st.markdown(
-        '<div class="panel-header">🔒 Anonymized</div>',
-        unsafe_allow_html=True,
-    )
-    if anon_path and anon_path.exists():
-        anon_content = anon_path.read_text(encoding="utf-8")
-        highlighted = _highlight_pii(anon_content)
+    with col_right:
         st.markdown(
-            f'<div class="md-panel">{highlighted}</div>',
+            '<div class="panel-header">🔒 Anonymized (PII Redacted)</div>',
             unsafe_allow_html=True,
         )
-
-        # PII statistics
-        pii_counts = _count_pii_tags(anon_content)
-        if pii_counts:
-            st.markdown("---")
-            total = sum(pii_counts.values())
-            st.markdown(f"**{total} PII entities** detected:")
-            legend_html = '<div class="pii-legend">'
-            for tag, count in pii_counts.items():
-                color = _PII_COLORS.get(tag, _PII_COLORS["PII"])
-                legend_html += (
-                    f'<span class="pii-badge" style="background:{color};">'
-                    f"{tag}: {count}</span>"
-                )
-            legend_html += "</div>"
-            st.markdown(legend_html, unsafe_allow_html=True)
-    else:
-        st.info("Not yet anonymized. Run the anonymization pipeline on the cluster.")
+        if anon_path and anon_path.exists():
+            _render_anon(anon_path)
+        else:
+            st.info("Not yet anonymized.")

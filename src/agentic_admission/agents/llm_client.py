@@ -162,12 +162,35 @@ async def complete[T: BaseModel](
         cause = exc.last_attempt.exception()
         msg = f"LLM request failed after retries: {cause}"
         raise LLMConnectionError(msg) from cause
-    except (httpx.HTTPStatusError, httpx.ConnectError, httpx.ReadTimeout) as exc:
+    except httpx.HTTPStatusError as exc:
+        # Log the response body for non-retryable HTTP errors (e.g. 400)
+        try:
+            error_body = exc.response.text[:500]
+        except Exception:
+            error_body = "(unreadable)"
+        logger.warning("LLM HTTP {}: {}", exc.response.status_code, error_body)
+        msg = f"LLM request failed: {exc}"
+        raise LLMConnectionError(msg) from exc
+    except (httpx.ConnectError, httpx.ReadTimeout) as exc:
         msg = f"LLM request failed: {exc}"
         raise LLMConnectionError(msg) from exc
 
     body = response.json()
-    raw_content = body["choices"][0]["message"]["content"]
+
+    # OpenRouter sometimes returns HTTP 200 with an error body
+    if "error" in body:
+        err = body["error"]
+        err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+        msg = f"LLM returned error in response body: {err_msg}"
+        raise LLMResponseError(msg)
+
+    try:
+        raw_content = body["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as exc:
+        msg = f"LLM response missing expected structure: {str(body)[:200]}"
+        raise LLMResponseError(msg) from exc
+
+    logger.debug("LLM raw response: {}", raw_content[:500])
 
     try:
         parsed = json.loads(raw_content)
