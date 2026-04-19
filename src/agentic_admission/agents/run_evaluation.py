@@ -133,8 +133,30 @@ async def evaluate_single(
         }
     )
 
-    # Prepend GPA summary to transcript text for the evaluator agents
+    # Prepend SPE metadata and GPA summary to transcript text
     enriched_transcript = dossier.transcript_text
+
+    # SPE institutional context (set by EPFL before any evaluation)
+    spe_header_parts: list[str] = []
+    if dossier.school_quality or dossier.gpa_threshold:
+        spe_header_parts.append("## EPFL SPE Institutional Assessment\n")
+        if dossier.school_quality:
+            spe_header_parts.append(
+                f"- Institution category: **{dossier.school_quality}**\n"
+            )
+        if dossier.gpa_threshold:
+            spe_header_parts.append(
+                f"- GPA admission threshold for this institution: "
+                f"**{dossier.gpa_threshold}**\n"
+            )
+        if dossier.spe_remarks:
+            spe_header_parts.append(f"- SPE remarks: {dossier.spe_remarks}\n")
+        spe_header_parts.append(
+            "\nCandidates below the GPA threshold are normally rejected "
+            "unless exceptional circumstances justify an exception.\n"
+        )
+        spe_header_parts.append("\n---\n\n")
+
     if gpa.gpa_value != "N/A":
         gpa_summary = (
             f"## Extracted GPA Summary\n\n"
@@ -146,7 +168,10 @@ async def evaluate_single(
             f"- Notable courses: {gpa.notable_courses}\n"
             f"- Extraction confidence: {gpa.confidence:.0%}\n\n---\n\n"
         )
-        enriched_transcript = gpa_summary + dossier.transcript_text
+        spe_header_parts.append(gpa_summary)
+
+    if spe_header_parts:
+        enriched_transcript = "".join(spe_header_parts) + dossier.transcript_text
 
     calibration_context, historical_letters = get_calibration_context(
         candidate_letters=dossier.letters_text,

@@ -61,6 +61,8 @@ class DossierContent(BaseModel, frozen=True):
     school_country: str = ""
     school_name: str = ""
     school_quality: str = ""
+    gpa_threshold: str = ""
+    spe_remarks: str = ""
     decision_final: str = ""
     gpa_value: str = ""
     gpa_scale: str = ""
@@ -251,6 +253,8 @@ def enrich_with_parquet(dossiers: list[DossierContent], parquet_path: Path) -> l
                         "school_country": candidate.school_country,
                         "school_name": candidate.school_name,
                         "school_quality": candidate.school_quality,
+                        "gpa_threshold": candidate.gpa_scale,
+                        "spe_remarks": candidate.spe_remarks,
                         "decision_final": decision,
                     },
                 ),
