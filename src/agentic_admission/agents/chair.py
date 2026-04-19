@@ -17,6 +17,7 @@ from agentic_admission.models.evaluation import (
     DebateTranscript,
     Decision,
     PanelVerdict,
+    VerdictSummary,
 )
 
 if TYPE_CHECKING:
@@ -25,10 +26,48 @@ if TYPE_CHECKING:
 _MAX_DEBATE_ROUNDS = 2
 
 
+SCORING_WEIGHTS: dict[str, float] = {
+    "academic_strength": 0.20,
+    "institution_quality": 0.15,
+    "reference_quality": 0.15,
+    "calibration_confidence": 0.10,
+    "motivation_clarity": 0.10,
+    "program_fit": 0.10,
+    "risk_flags": 0.10,
+    "consistency": 0.10,
+}
+"""Explicit scoring weights for the composite score.
+
+Academic credentials and reference quality dominate (50% combined).
+Motivation and devil's-advocate dimensions are secondary signals — a weak
+motivation letter should not sink an academically strong candidate.
+"""
+
+
+def compute_composite(final_scores: dict[str, int]) -> float:
+    """Compute deterministic weighted composite from dimension scores.
+
+    Parameters
+    ----------
+    final_scores
+        Dimension name to integer score (1-10).
+
+    Returns
+    -------
+    float
+        Weighted average clamped to 1.0-10.0.
+    """
+    total = sum(
+        final_scores.get(dim, 5) * weight for dim, weight in SCORING_WEIGHTS.items()
+    )
+    return max(1.0, min(10.0, round(total, 2)))
+
+
 class ChairSynthesis(BaseModel, frozen=True):
     """Lightweight response model for the Chair's final synthesis.
 
-    Uses explicit named fields so the LLM knows exactly what to produce.
+    The composite_score is computed deterministically in Python — the LLM
+    only provides dimension scores and the decision.
 
     Attributes
     ----------
@@ -48,8 +87,6 @@ class ChairSynthesis(BaseModel, frozen=True):
         Final score for risk flags (1-10, inverse: 10 = no concerns).
     consistency
         Final score for dossier consistency (1-10).
-    composite_score
-        Weighted average of all scores (1.0-10.0).
     decision
         Accept, reject, or waitlist.
     justification
@@ -64,9 +101,9 @@ class ChairSynthesis(BaseModel, frozen=True):
     program_fit: int
     risk_flags: int
     consistency: int
-    composite_score: float
     decision: Decision
-    justification: str
+    pros: tuple[str, ...]
+    cons: tuple[str, ...]
 
 
 class DebateArgument(BaseModel, frozen=True):
@@ -102,10 +139,13 @@ def _format_scorecards(scorecards: tuple[AgentScorecard, ...]) -> str:
     """
     sections: list[str] = []
     for card in scorecards:
-        lines = [f"### {card.role.value.upper()}"]
+        lines: list[str] = [f"### {card.role.value.upper()}"]
         for dim, score in card.scores.items():
-            justification = card.justifications.get(dim, "")
-            lines.append(f"- {dim}: {score}/10 — {justification}")
+            lines.append(f"- {dim}: {score}/10")
+            justification = card.justifications.get(dim)
+            if justification is not None:
+                lines.extend(f"  + {pro}" for pro in justification.pros)
+                lines.extend(f"  - {con}" for con in justification.cons)
         sections.append("\n".join(lines))
     return "\n\n".join(sections)
 
@@ -280,6 +320,10 @@ async def synthesize(
             sections.append(f"{header}\n{body}")
         debate_text = "\n\n".join(sections)
 
+    weight_description = ", ".join(
+        f"{dim} ({w:.0%})" for dim, w in SCORING_WEIGHTS.items()
+    )
+
     messages = [
         ChatMessage(role="system", content=AGENT_PROMPTS[AgentRole.CHAIR]),
         ChatMessage(
@@ -287,12 +331,16 @@ async def synthesize(
             content=(
                 "Produce the FINAL VERDICT for this candidate.\n\n"
                 "Return a JSON with:\n"
-                "- final_scores: dict of 8 dimension names to integer scores (1-10)\n"
-                "  Dimensions: academic_strength, institution_quality, reference_quality, "
-                "calibration_confidence, motivation_clarity, program_fit, risk_flags, consistency\n"
-                "- composite_score: weighted average as a float (1.0-10.0)\n"
+                "- 8 dimension scores (integer 1-10): academic_strength, "
+                "institution_quality, reference_quality, calibration_confidence, "
+                "motivation_clarity, program_fit, risk_flags, consistency\n"
                 "- decision: one of 'accept', 'reject', or 'waitlist'\n"
-                "- justification: 2-3 sentence justification\n\n"
+                "- pros: array of 2-5 bullet points summarising key strengths\n"
+                "- cons: array of 0-5 bullet points summarising concerns\n\n"
+                "NOTE: The composite score is computed automatically using these "
+                f"weights: {weight_description}. Academic credentials and "
+                "reference quality carry the most weight. A strong transcript "
+                "should not be penalised by a weak motivation letter.\n\n"
                 f"## Specialist Scorecards\n\n{formatted_cards}\n\n"
                 f"## Debate Transcripts\n\n{debate_text or '(no debates needed)'}"
             ),
@@ -317,12 +365,15 @@ async def synthesize(
         "consistency": synthesis.consistency,
     }
 
+    composite = compute_composite(final_scores)
+    logger.info("Composite score for {}: {:.2f}", candidate_id, composite)
+
     return PanelVerdict(
         candidate_id=candidate_id,
         scorecards=scorecards,
         debates=debates,
         final_scores=final_scores,
-        composite_score=synthesis.composite_score,
+        composite_score=composite,
         decision=synthesis.decision,
-        justification=synthesis.justification,
+        justification=VerdictSummary(pros=synthesis.pros, cons=synthesis.cons),
     )

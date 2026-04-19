@@ -384,7 +384,7 @@ def _role_icon(role: str) -> str:
 
 def _mock_chat_response(candidate: dict, user_message: str) -> str:
     """Generate a mock chat response based on keywords."""
-    if candidate.get("summary") is None:
+    if not candidate.get("verdict_pros") and not candidate.get("evaluations"):
         return NO_DATA_CHAT_RESPONSE
 
     msg_lower = user_message.lower()
@@ -475,7 +475,7 @@ filtered_candidates = [
         not search_query
         or search_query.lower() in c.get("school", "").lower()
         or search_query.lower() in c.get("candidate_id", "").lower()
-        or search_query.lower() in (c.get("summary") or "").lower()
+        or search_query.lower() in " ".join(c.get("verdict_pros", [])).lower()
     )
 ]
 
@@ -574,7 +574,8 @@ for candidate in filtered_candidates:
         else ""
     )
 
-    summary_text = candidate.get("summary") or ""
+    verdict_pros = candidate.get("verdict_pros", [])
+    verdict_cons = candidate.get("verdict_cons", [])
 
     # Card header (HTML only — no markdown content here)
     border_style = "border-color:#3b82f6;border-width:2px;" if is_selected else ""
@@ -588,11 +589,24 @@ for candidate in filtered_candidates:
         if gpa_display
         else ""
     )
+    # Minor recommendation badge
+    minor_rec = candidate.get("minor_recommendation")
+    minor_badge = ""
+    if minor_rec and isinstance(minor_rec, dict):
+        primary = minor_rec.get("primary_minor", "")
+        if primary:
+            minor_badge = (
+                f'<span style="background:#dbeafe;color:#1e40af;padding:2px 8px;'
+                f'border-radius:12px;font-size:0.7rem;font-weight:600;">'
+                f"Minor: {_html_escape(primary)}</span>"
+            )
+
     card_header = (
         f'<div class="candidate-card" style="{border_style}">'
         f'<div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">'
         f'<strong style="font-size:1.05rem;">{display_name}</strong>'
         f"{badge}"
+        f"{minor_badge}"
         f"{school_span}"
         f"{gpa_span}"
         f"{committee_badge}"
@@ -603,9 +617,15 @@ for candidate in filtered_candidates:
     )
     st.markdown(card_header, unsafe_allow_html=True)
 
-    # Summary (rendered as markdown so **bold** works)
-    if summary_text:
-        st.markdown(summary_text)
+    # Pros/cons summary
+    if verdict_pros or verdict_cons:
+        pros_col, cons_col = st.columns(2)
+        with pros_col:
+            for pro in verdict_pros:
+                st.markdown(f":green[+] {pro}")
+        with cons_col:
+            for con in verdict_cons:
+                st.markdown(f":red[-] {con}")
 
     # View details button
     col_btn, col_spacer = st.columns([1, 5])
@@ -632,20 +652,62 @@ for candidate in filtered_candidates:
         # ---- Tab 1: Agent Analysis ----
         with tab_analysis:
             moderator = candidate.get("moderator", {})
+            mod_pros = moderator.get("pros", [])
+            mod_cons = moderator.get("cons", [])
+            mod_decision = moderator.get("decision", "")
+            mod_composite = moderator.get("composite", 0.0)
 
-            # Moderator synthesis — styled panel with report inside
-            report_text = _html_escape(
-                moderator.get("report", "No moderator report available."),
-            )
+            # Moderator synthesis — pros/cons layout
             st.markdown(
                 '<div class="moderator-panel">'
                 '<div style="font-size:0.8rem;font-weight:700;color:#1e40af;'
                 'text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem;">'
-                "Moderator Synthesis</div>"
-                f'<div style="color:#1e3a5f;line-height:1.6;">{report_text}</div>'
+                f"Chair Synthesis &mdash; {mod_decision} "
+                f"(composite: {mod_composite:.1f}/10)</div>"
                 "</div>",
                 unsafe_allow_html=True,
             )
+            mod_pro_col, mod_con_col = st.columns(2)
+            with mod_pro_col:
+                st.markdown("**Strengths**")
+                for pro in mod_pros:
+                    st.markdown(f":green[+] {_html_escape(pro)}")
+            with mod_con_col:
+                st.markdown("**Concerns**")
+                for con in mod_cons:
+                    st.markdown(f":red[-] {_html_escape(con)}")
+                if not mod_cons:
+                    st.markdown("_None identified_")
+
+            # Minor recommendation
+            if minor_rec and isinstance(minor_rec, dict):
+                recommended = minor_rec.get("recommended", [])
+                if recommended:
+                    st.markdown("**Recommended Minors**")
+                    minor_cols = st.columns(len(recommended))
+                    for j, rec in enumerate(recommended):
+                        with minor_cols[j]:
+                            m_name = rec.get("minor_name", "")
+                            m_section = rec.get("section_code", "")
+                            m_score = rec.get("fit_score", 0)
+                            m_reason = rec.get("reasoning", "")
+                            rank_label = ["1st", "2nd", "3rd"][j] if j < 3 else f"{j + 1}th"
+                            score_color = _confidence_color(m_score / 10.0)
+                            st.markdown(
+                                f'<div class="agent-card">'
+                                f'<div class="agent-role">{rank_label} choice</div>'
+                                f'<div style="margin:0.4rem 0;">'
+                                f'<strong>{_html_escape(m_name)}</strong> '
+                                f'<span style="color:#64748b;">({m_section})</span>'
+                                f"</div>"
+                                f'<div style="font-size:0.85rem;">Fit: '
+                                f'<span style="color:{score_color};font-weight:700;">'
+                                f"{m_score}/10</span></div>"
+                                f'<div style="font-size:0.8rem;color:#475569;'
+                                f'margin-top:0.3rem;">{_html_escape(m_reason)}</div>'
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
 
             # Per-agent evaluations
             agent_cols = st.columns(len(candidate.get("evaluations", [])) or 1)
@@ -681,8 +743,18 @@ for candidate in filtered_candidates:
                         unsafe_allow_html=True,
                     )
 
-                    # Reasoning (rendered as markdown, not inside HTML)
-                    st.markdown(evaluation["reasoning"])
+                    # Pros/cons per dimension
+                    dim_justifications = evaluation.get("justifications", {})
+                    for dim_name, dim_j in dim_justifications.items():
+                        dim_label = dim_name.replace("_", " ").title()
+                        st.markdown(f"**{dim_label}**")
+                        if isinstance(dim_j, dict):
+                            for pro in dim_j.get("pros", []):
+                                st.markdown(f":green[+] {pro}")
+                            for con in dim_j.get("cons", []):
+                                st.markdown(f":red[-] {con}")
+                        else:
+                            st.markdown(str(dim_j))
 
                     # Scores
                     scores = evaluation.get("scores", {})
@@ -713,43 +785,42 @@ for candidate in filtered_candidates:
                                 unsafe_allow_html=True,
                             )
 
-            # ---- Debate transcripts (after agent cards) ----
+            # ---- Debate transcripts (collapsible) ----
             debates = candidate.get("debates", [])
             if debates:
-                st.markdown(
-                    '<div class="section-header" style="margin-top:1.5rem;">'
-                    "Deliberation — Targeted Debates</div>",
-                    unsafe_allow_html=True,
-                )
+                n_debates = len(debates)
+                with st.expander(
+                    f"View Deliberation Debates ({n_debates} conflict{'s' if n_debates > 1 else ''})",
+                    expanded=False,
+                ):
+                    for debate in debates:
+                        dimension = debate.get("conflict_dimension", "unknown")
+                        dim_label = _html_escape(dimension.replace("_", " ").title())
+                        entries = debate.get("entries", [])
 
-                for debate in debates:
-                    dimension = debate.get("conflict_dimension", "unknown")
-                    dim_label = _html_escape(dimension.replace("_", " ").title())
-                    entries = debate.get("entries", [])
+                        entry_parts: list[str] = []
+                        for entry in entries:
+                            role = entry.get("role", "")
+                            round_num = entry.get("round_number", 0)
+                            argument = _html_escape(entry.get("argument", ""))
+                            icon = _role_icon(role)
+                            entry_parts.append(
+                                f'<div class="debate-entry">'
+                                f'<div class="debate-entry-header">'
+                                f'<span class="debate-role">{icon} {_html_escape(role)}</span>'
+                                f'<span class="debate-round">Round {round_num}</span>'
+                                f"</div>"
+                                f'<div class="debate-argument">{argument}</div>'
+                                f"</div>",
+                            )
 
-                    entry_parts: list[str] = []
-                    for entry in entries:
-                        role = entry.get("role", "")
-                        round_num = entry.get("round_number", 0)
-                        argument = _html_escape(entry.get("argument", ""))
-                        icon = _role_icon(role)
-                        entry_parts.append(
-                            f'<div class="debate-entry">'
-                            f'<div class="debate-entry-header">'
-                            f'<span class="debate-role">{icon} {_html_escape(role)}</span>'
-                            f'<span class="debate-round">Round {round_num}</span>'
-                            f"</div>"
-                            f'<div class="debate-argument">{argument}</div>'
-                            f"</div>",
+                        st.markdown(
+                            f'<div class="debate-topic">'
+                            f'<div class="debate-topic-header">Conflict: {dim_label}</div>'
+                            + "".join(entry_parts)
+                            + "</div>",
+                            unsafe_allow_html=True,
                         )
-
-                    st.markdown(
-                        f'<div class="debate-topic">'
-                        f'<div class="debate-topic-header">Conflict: {dim_label}</div>'
-                        + "".join(entry_parts)
-                        + "</div>",
-                        unsafe_allow_html=True,
-                    )
 
         # ---- Tab 2: Chat ----
         with tab_chat:
@@ -760,7 +831,7 @@ for candidate in filtered_candidates:
                 st.session_state.chat_histories[chat_key] = []
 
                 # Add welcome message
-                if candidate.get("summary") is None:
+                if not candidate.get("verdict_pros") and not candidate.get("evaluations"):
                     welcome = (
                         "⚠️ **Limited information available for this candidate.** "
                         "The evaluation was incomplete due to missing documents. "
