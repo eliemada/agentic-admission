@@ -252,6 +252,15 @@ type = "simple"
     multiple = true
     default = ""
 
+  [tool.poe.tasks.demo]
+  help = "Run demo evaluation on 5 candidates (2 admitted, 3 rejected)"
+  shell = "python scripts/demo_eval.py ${demo_args}"
+
+    [tool.poe.tasks.demo.args.demo_args]
+    positional = true
+    multiple = true
+    default = ""
+
   [tool.poe.tasks.run]
   help = "Run the admission agent"
   cmd = "uv run python -m agentic_admission.main"
