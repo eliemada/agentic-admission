@@ -15,6 +15,10 @@ from agentic_admission.agents.evaluators import (
     evaluate_reference,
 )
 from agentic_admission.agents.minor_advisor import recommend_minor
+from agentic_admission.curriculum.university_profiles import (
+    format_university_context,
+    load_university_profiles,
+)
 from agentic_admission.models.evaluation import DebateTranscript, MinorRecommendation, PanelVerdict
 
 _CLIENT_TIMEOUT: float = 120.0
@@ -30,6 +34,7 @@ async def evaluate_candidate(
     motivation_text: str,
     cv_text: str,
     full_dossier_text: str,
+    school_name: str = "",
     model: str,
     base_url: str,
     api_key: str = "",
@@ -70,13 +75,24 @@ async def evaluate_candidate(
     PanelVerdict
         The final scorecard, recommendation, and justification.
     """
+    # Enrich transcript with university profile context
+    enriched_transcript = transcript_text
+    if school_name:
+        try:
+            profiles = load_university_profiles()
+            uni_ctx = format_university_context(profiles, school_name)
+            if uni_ctx:
+                enriched_transcript = f"{uni_ctx}\n\n{transcript_text}"
+        except Exception:
+            logger.debug("Could not load university profiles — continuing without")
+
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT, headers=headers) as client:
         # --- Phase 1: Independent evaluation (4 agents in parallel) ---
         logger.info("Phase 1: Independent evaluation for {}", candidate_id)
 
         academic_task = evaluate_academic(
-            transcript_text=transcript_text, model=model, base_url=base_url, client=client
+            transcript_text=enriched_transcript, model=model, base_url=base_url, client=client
         )
         reference_task = evaluate_reference(
             letters_text=letters_text,
@@ -107,13 +123,11 @@ async def evaluate_candidate(
         # Run evaluators and minor advisor in parallel.
         # Evaluators must succeed; minor advisor is best-effort.
         scorecards_task = asyncio.gather(
-            academic_task, reference_task, motivation_task, devils_task,
+            academic_task, reference_task, motivation_task, devils_task
         )
         minor_wrapped = asyncio.gather(minor_task, return_exceptions=True)
 
-        scorecard_list, minor_results = await asyncio.gather(
-            scorecards_task, minor_wrapped,
-        )
+        scorecard_list, minor_results = await asyncio.gather(scorecards_task, minor_wrapped)
         scorecards = tuple(scorecard_list)
 
         minor_result = minor_results[0]

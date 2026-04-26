@@ -141,13 +141,10 @@ async def evaluate_single(
     if dossier.school_quality or dossier.gpa_threshold:
         spe_header_parts.append("## EPFL SPE Institutional Assessment\n")
         if dossier.school_quality:
-            spe_header_parts.append(
-                f"- Institution category: **{dossier.school_quality}**\n"
-            )
+            spe_header_parts.append(f"- Institution category: **{dossier.school_quality}**\n")
         if dossier.gpa_threshold:
             spe_header_parts.append(
-                f"- GPA admission threshold for this institution: "
-                f"**{dossier.gpa_threshold}**\n"
+                f"- GPA admission threshold for this institution: **{dossier.gpa_threshold}**\n"
             )
         if dossier.spe_remarks:
             spe_header_parts.append(f"- SPE remarks: {dossier.spe_remarks}\n")
@@ -189,6 +186,7 @@ async def evaluate_single(
         motivation_text=dossier.motivation_text,
         cv_text=dossier.cv_text,
         full_dossier_text=dossier.full_dossier_text,
+        school_name=dossier.school_name,
         model=model,
         base_url=base_url,
         api_key=api_key,

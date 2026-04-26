@@ -28,6 +28,8 @@ dependencies = [
   "tenacity>=9.1.4",
   "zeroentropy>=0.1.0a11",
   "openai>=1.60.0",
+  "beautifulsoup4>=4.14.3",
+  "pyyaml>=6.0.3",
 ]
 
 [project.scripts]
@@ -120,6 +122,9 @@ unfixable = ["ERA001", "F401", "F841", "T201", "T203"]
 ]
 "src/agentic_admission/anonymizer/post_filters.py" = [
     "PLC0415",  # Lazy import: avoid circular import with config at module level
+]
+"src/agentic_admission/agents/minor_advisor.py" = [
+    "PLC0415",  # Lazy imports: break circular dependency with curriculum.matcher
 ]
 
 [tool.ruff.lint.flake8-annotations]
@@ -226,6 +231,18 @@ type = "simple"
   help = "Open the admission review dashboard"
   cmd = "streamlit run dashboard/review.py --server.port 8502"
 
+  [tool.poe.tasks.universities]
+  help = "Open the university profiles editor"
+  cmd = "streamlit run dashboard/universities.py --server.port 8503"
+
+  [tool.poe.tasks.cohort]
+  help = "Open the cohort viewer dashboard"
+  cmd = "streamlit run dashboard/cohort.py --server.port 8504"
+
+  [tool.poe.tasks.build-cohort]
+  help = "Parse Synthese PDFs → cohort JSON"
+  cmd = "python -m agentic_admission.extraction.cohort_builder"
+
   [tool.poe.tasks.calibrate-ingest]
   help = "Upload anonymized reference letters to zsearch"
   cmd = "python -m agentic_admission.calibration.ingest"
@@ -260,6 +277,14 @@ type = "simple"
     positional = true
     multiple = true
     default = ""
+
+  [tool.poe.tasks.scrape-curriculum]
+  help = "Scrape EPFL bachelor & master curriculum → data/reference/epfl_curriculum/"
+  cmd = "python -m agentic_admission.curriculum"
+
+  [tool.poe.tasks.mine-universities]
+  help = "Mine university profiles from historical data → data/reference/"
+  cmd = "python -m agentic_admission.curriculum.university_profiles"
 
   [tool.poe.tasks.run]
   help = "Run the admission agent"

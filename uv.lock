@@ -25,6 +25,7 @@ name = "agentic-admission"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "beautifulsoup4" },
     { name = "docling" },
     { name = "en-core-web-sm" },
     { name = "gliner" },
@@ -39,6 +40,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pymupdf" },
+    { name = "pyyaml" },
     { name = "streamlit" },
     { name = "tenacity" },
     { name = "zeroentropy" },
@@ -61,6 +63,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "docling", specifier = ">=2.77.0" },
     { name = "en-core-web-sm", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
     { name = "gliner", specifier = ">=0.2.25" },
@@ -75,6 +78,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.10.0" },
     { name = "pydantic-settings", specifier = ">=2.7.0" },
     { name = "pymupdf", specifier = ">=1.27.2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "streamlit", specifier = ">=1.55.0" },
     { name = "tenacity", specifier = ">=9.1.4" },
     { name = "zeroentropy", specifier = ">=0.1.0a11" },
