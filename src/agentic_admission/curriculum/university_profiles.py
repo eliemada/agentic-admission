@@ -124,7 +124,7 @@ def mine_profiles(parquet_path: Path = _PARQUET_PATH) -> dict[str, UniversityPro
     schools: dict[str, dict[str, Any]] = {}
     for row in rows:
         name = row["school_name"].strip()
-        if not name:
+        if not name or "inconnue" in name.lower() or "étrangère" in name.lower():
             continue
 
         decision = _normalize_decision(row)

@@ -83,7 +83,7 @@ def _response_to_scorecard(role: AgentRole, response: BaseModel) -> AgentScoreca
             dim = key.removesuffix("_justification")
             justifications[dim] = _parse_justification(str(value))
         else:
-            scores[key] = int(value)
+            scores[key] = max(1, min(10, int(value)))
 
     return AgentScorecard(role=role, scores=scores, justifications=justifications)
 

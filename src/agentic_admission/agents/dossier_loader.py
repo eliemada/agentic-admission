@@ -135,7 +135,10 @@ def load_anonymized_dossier(candidate_dir: Path, semester: str) -> DossierConten
 
 
 def load_all_anonymized_dossiers(
-    anonymized_root: Path, *, limit: int | None = None,
+    anonymized_root: Path,
+    *,
+    limit: int | None = None,
+    semester: str | None = None,
 ) -> list[DossierContent]:
     """Scan the anonymized root and load all candidate dossiers.
 
@@ -145,6 +148,8 @@ def load_all_anonymized_dossiers(
         Root of anonymized dossier tree (e.g. ``data/processed/anonymized/``).
     limit
         If set, only load the first *limit* candidates (for testing).
+    semester
+        If set, only load candidates from this semester (e.g. ``"2025-26-spring"``).
 
     Returns
     -------
@@ -159,7 +164,9 @@ def load_all_anonymized_dossiers(
     semester_dirs = sorted(d for d in anonymized_root.iterdir() if d.is_dir())
 
     for semester_dir in semester_dirs:
-        semester = semester_dir.name
+        sem = semester_dir.name
+        if semester is not None and sem != semester:
+            continue
         candidate_dirs = sorted(d for d in semester_dir.iterdir() if d.is_dir())
 
         for cand_dir in candidate_dirs:
@@ -167,10 +174,10 @@ def load_all_anonymized_dossiers(
                 logger.info("Reached limit of {} dossiers", limit)
                 return dossiers
 
-            dossier = load_anonymized_dossier(cand_dir, semester)
+            dossier = load_anonymized_dossier(cand_dir, sem)
             dossiers.append(dossier)
 
-        logger.debug("Loaded {}: {} candidates", semester, len(candidate_dirs))
+        logger.debug("Loaded {}: {} candidates", sem, len(candidate_dirs))
 
     logger.info("Loaded {} anonymized dossiers from {}", len(dossiers), anonymized_root)
     return dossiers

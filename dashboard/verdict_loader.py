@@ -295,6 +295,60 @@ def _load_parquet_index(parquet_path: Path) -> dict[str, dict[str, str]]:
     return index
 
 
+def _build_name_index(anonymized_root: Path) -> dict[str, str]:
+    """Build mapping from ``semester_hash`` to real candidate name.
+
+    Uses ``path_mapping.parquet`` to resolve hashes to original folder names,
+    then matches against cohort JSON files for full names.
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping from candidate_id (``"semester_hash"``) to display name.
+    """
+    mapping_path = anonymized_root / "path_mapping.parquet"
+    if not mapping_path.exists():
+        return {}
+
+    # Step 1: hash -> original folder name
+    table = pq.read_table(mapping_path)
+    rows = table.to_pydict()
+    hash_to_folder: dict[str, str] = {}
+    for anon, orig in zip(rows["anonymized_path"], rows["original_path"]):
+        parts_a = anon.split("/")
+        parts_o = orig.split("/")
+        if len(parts_a) >= 2 and len(parts_o) >= 2:
+            cid = f"{parts_a[0]}_{parts_a[1]}"
+            if cid not in hash_to_folder:
+                hash_to_folder[cid] = parts_o[1]
+
+    # Step 2: folder name -> full name from cohort JSONs
+    folder_to_name: dict[str, str] = {}
+    cohort_dir = anonymized_root.parent
+    for cohort_file in cohort_dir.glob("cohort_*.json"):
+        try:
+            candidates = json.loads(cohort_file.read_text(encoding="utf-8"))
+            for c in candidates:
+                fname = c.get("folder_name", "")
+                full = c.get("full_name", "")
+                if fname and full:
+                    folder_to_name[fname] = full
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    # Step 3: merge
+    result: dict[str, str] = {}
+    for cid, folder in hash_to_folder.items():
+        name = folder_to_name.get(folder)
+        if name:
+            result[cid] = name
+        else:
+            # Fallback: capitalize the folder name
+            result[cid] = folder.replace("_", " ").title()
+
+    return result
+
+
 def load_all_verdicts(
     evaluations_dir: Path,
     parquet_path: Path | None = None,
@@ -322,6 +376,10 @@ def load_all_verdicts(
         parquet_path = evaluations_dir.parent / "all_candidates.parquet"
     parquet_index = _load_parquet_index(parquet_path)
 
+    # Load name deanonymization index
+    anonymized_root = evaluations_dir.parent / "anonymized"
+    name_index = _build_name_index(anonymized_root)
+
     verdicts = []
     for path in sorted(evaluations_dir.glob("*.json")):
         v = load_verdict(path)
@@ -334,6 +392,9 @@ def load_all_verdicts(
         meta = parquet_index.get(v["candidate_id"], {})
         if meta:
             v["committee_decision"] = meta.get("committee_decision", "")
+
+        # Deanonymize candidate name
+        v["candidate_name"] = name_index.get(v["candidate_id"], "")
 
         verdicts.append(v)
 

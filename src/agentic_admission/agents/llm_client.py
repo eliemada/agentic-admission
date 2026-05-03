@@ -56,7 +56,7 @@ def _is_retryable(exc: BaseException) -> bool:
     """
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code in _RETRYABLE_STATUS_CODES
-    return isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout))
+    return isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout, httpx.ReadError))
 
 
 @retry(
@@ -142,8 +142,10 @@ async def complete[T: BaseModel](
     LLMResponseError
         When the response cannot be parsed as JSON or fails Pydantic validation.
     """
+    from agentic_admission.config import settings
+
     schema = response_model.model_json_schema()
-    payload = {
+    payload: dict = {
         "model": model,
         "messages": [m.model_dump() for m in messages],
         "temperature": temperature,
@@ -154,52 +156,73 @@ async def complete[T: BaseModel](
         },
     }
 
-    logger.debug("LLM request to {}: model={}", base_url, model)
+    if "openrouter" in base_url and settings.openrouter_provider:
+        payload["provider"] = {"order": [settings.openrouter_provider]}
 
-    try:
-        response = await _post_with_retry(base_url=base_url, payload=payload, client=client)
-    except RetryError as exc:
-        cause = exc.last_attempt.exception()
-        msg = f"LLM request failed after retries: {cause}"
-        raise LLMConnectionError(msg) from cause
-    except httpx.HTTPStatusError as exc:
-        # Log the response body for non-retryable HTTP errors (e.g. 400)
+    _max_llm_attempts = 3
+
+    for attempt in range(1, _max_llm_attempts + 1):
+        logger.debug("LLM request to {}: model={} (attempt {}/{})", base_url, model, attempt, _max_llm_attempts)
+
         try:
-            error_body = exc.response.text[:500]
-        except Exception:
-            error_body = "(unreadable)"
-        logger.warning("LLM HTTP {}: {}", exc.response.status_code, error_body)
-        msg = f"LLM request failed: {exc}"
-        raise LLMConnectionError(msg) from exc
-    except (httpx.ConnectError, httpx.ReadTimeout) as exc:
-        msg = f"LLM request failed: {exc}"
-        raise LLMConnectionError(msg) from exc
+            response = await _post_with_retry(base_url=base_url, payload=payload, client=client)
+        except RetryError as exc:
+            cause = exc.last_attempt.exception()
+            msg = f"LLM request failed after retries: {cause}"
+            raise LLMConnectionError(msg) from cause
+        except httpx.HTTPStatusError as exc:
+            try:
+                error_body = exc.response.text[:500]
+            except Exception:
+                error_body = "(unreadable)"
+            logger.warning("LLM HTTP {}: {}", exc.response.status_code, error_body)
+            msg = f"LLM request failed: {exc}"
+            raise LLMConnectionError(msg) from exc
+        except (httpx.ConnectError, httpx.ReadTimeout) as exc:
+            msg = f"LLM request failed: {exc}"
+            raise LLMConnectionError(msg) from exc
 
-    body = response.json()
+        body = response.json()
 
-    # OpenRouter sometimes returns HTTP 200 with an error body
-    if "error" in body:
-        err = body["error"]
-        err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-        msg = f"LLM returned error in response body: {err_msg}"
-        raise LLMResponseError(msg)
+        # OpenRouter sometimes returns HTTP 200 with an error body
+        if "error" in body:
+            err = body["error"]
+            err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            msg = f"LLM returned error in response body: {err_msg}"
+            raise LLMResponseError(msg)
 
-    try:
-        raw_content = body["choices"][0]["message"]["content"]
-    except (KeyError, IndexError) as exc:
-        msg = f"LLM response missing expected structure: {str(body)[:200]}"
-        raise LLMResponseError(msg) from exc
+        try:
+            raw_content = body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError) as exc:
+            msg = f"LLM response missing expected structure: {str(body)[:200]}"
+            raise LLMResponseError(msg) from exc
 
-    logger.debug("LLM raw response: {}", raw_content[:500])
+        if not raw_content:
+            if attempt < _max_llm_attempts:
+                logger.warning("LLM returned empty content (attempt {}/{}), retrying ...", attempt, _max_llm_attempts)
+                continue
+            msg = f"LLM returned empty content after {_max_llm_attempts} attempts: {str(body)[:200]}"
+            raise LLMResponseError(msg)
 
-    try:
-        parsed = json.loads(raw_content)
-    except json.JSONDecodeError as exc:
-        msg = f"LLM returned unparseable JSON: {raw_content[:200]}"
-        raise LLMResponseError(msg) from exc
+        logger.debug("LLM raw response: {}", raw_content[:500])
 
-    try:
-        return response_model.model_validate(parsed)
-    except ValidationError as exc:
-        msg = f"LLM response failed {response_model.__name__} validation"
-        raise LLMResponseError(msg) from exc
+        try:
+            parsed = json.loads(raw_content)
+        except json.JSONDecodeError as exc:
+            if attempt < _max_llm_attempts:
+                logger.warning("LLM returned unparseable JSON (attempt {}/{}), retrying ...", attempt, _max_llm_attempts)
+                continue
+            msg = f"LLM returned unparseable JSON: {raw_content[:200]}"
+            raise LLMResponseError(msg) from exc
+
+        try:
+            return response_model.model_validate(parsed)
+        except ValidationError as exc:
+            if attempt < _max_llm_attempts:
+                logger.warning("LLM response failed validation (attempt {}/{}), retrying ...", attempt, _max_llm_attempts)
+                continue
+            msg = f"LLM response failed {response_model.__name__} validation"
+            raise LLMResponseError(msg) from exc
+
+    msg = "LLM request failed: exhausted all attempts"
+    raise LLMResponseError(msg)

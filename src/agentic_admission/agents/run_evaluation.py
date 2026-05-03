@@ -7,6 +7,8 @@ import asyncio
 import json
 from pathlib import Path
 
+import sys
+
 import httpx
 from loguru import logger
 
@@ -332,6 +334,9 @@ def print_comparison_table(results: list[tuple[DossierContent, PanelVerdict]]) -
 
 def main() -> None:
     """CLI entrypoint for E2E admission evaluation."""
+    logger.remove()
+    logger.add(sys.stderr, level=settings.log_level)
+
     parser = argparse.ArgumentParser(description="Run E2E admission evaluation")
     parser.add_argument(
         "--anonymized-root",
@@ -375,6 +380,12 @@ def main() -> None:
         default=False,
         help="Skip candidates that already have a verdict JSON in the output dir",
     )
+    parser.add_argument(
+        "--semester",
+        type=str,
+        default=None,
+        help="Only evaluate candidates from this semester (e.g. '2025-26-spring')",
+    )
     args = parser.parse_args()
 
     model = args.model or settings.model_name
@@ -383,8 +394,11 @@ def main() -> None:
     output_dir = args.output_dir or Path(settings.evaluation_output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Loading anonymized dossiers (limit={}) ...", args.limit)
-    dossiers = load_all_anonymized_dossiers(args.anonymized_root, limit=args.limit)
+    limit = args.limit or None
+    logger.info("Loading anonymized dossiers (limit={}, semester={}) ...", limit, args.semester)
+    dossiers = load_all_anonymized_dossiers(
+        args.anonymized_root, limit=limit, semester=args.semester,
+    )
 
     if not dossiers:
         logger.error("No dossiers found at {}", args.anonymized_root)

@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     log_level: str = "INFO"
-    model_name: str = "meta-llama/Llama-3.1-8B-Instruct"
+    model_name: str = "minimax/minimax-m2.7"
     model_base_url: str = "http://localhost:8000/v1"
     vlm_model_name: str = "Qwen/Qwen3-VL-8B-Instruct"
     vlm_base_url: str = "http://localhost:8001/v1"
@@ -46,8 +46,9 @@ class Settings(BaseSettings):
 
     # OpenRouter for calibration profile generation
     openrouter_api_key: str = ""
-    openrouter_model: str = "anthropic/claude-sonnet-4"
+    openrouter_model: str = "minimax/minimax-m2.7"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_provider: str = ""
 
     # Calibration profiles output directory
     calibration_profiles_dir: str = "data/processed/calibration_profiles"

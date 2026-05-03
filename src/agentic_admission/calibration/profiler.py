@@ -292,6 +292,10 @@ def _generate_single_profile(
         + "\n\n---\n\n".join(letter_sections)
     )
 
+    extra: dict = {}
+    if settings.openrouter_provider:
+        extra["extra_body"] = {"provider": {"order": [settings.openrouter_provider]}}
+
     response = client.chat.completions.create(
         model=settings.openrouter_model,
         messages=[
@@ -300,6 +304,7 @@ def _generate_single_profile(
         ],
         temperature=0.3,
         max_tokens=1024,
+        **extra,
     )
 
     return response.choices[0].message.content or ""

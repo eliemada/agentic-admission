@@ -212,6 +212,7 @@ async def detect_disagreements(
         model=model,
         base_url=base_url,
         client=client,
+        max_tokens=4096,
     )
     logger.info("Chair detected {} conflict(s)", len(report.conflicts))
     return report.conflicts
@@ -353,6 +354,7 @@ async def synthesize(
         model=model,
         base_url=base_url,
         client=client,
+        max_tokens=4096,
     )
 
     final_scores = {
