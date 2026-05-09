@@ -5,9 +5,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from pathlib import Path
-
 import sys
+from pathlib import Path
 
 import httpx
 from loguru import logger
@@ -18,10 +17,24 @@ from agentic_admission.agents.dossier_loader import (
     load_all_anonymized_dossiers,
 )
 from agentic_admission.agents.gpa_extractor import GpaExtraction, extract_gpa
+from agentic_admission.agents.gpa_gate import compare_to_threshold, epfl_internal_value
+from agentic_admission.agents.llm_client import LLMBillingError
 from agentic_admission.agents.orchestrator import evaluate_candidate
 from agentic_admission.calibration.retriever import get_calibration_context
 from agentic_admission.config import settings
+from agentic_admission.curriculum.university_profiles import (
+    detect_epfl_internal,
+    find_profile_by_name,
+    load_university_profiles,
+)
 from agentic_admission.models.evaluation import PanelVerdict
+
+_PROFILE_CACHE = load_university_profiles()
+"""Module-level profile cache. Loaded once at import time; ``find_profile_by_name``
+hits this read-only dict per candidate without re-reading JSON. The runner
+is restarted between evaluation batches anyway, so freshness is fine.
+"""
+
 
 # Mapping from committee decision strings to normalized values
 _COMMITTEE_DECISION_MAP: dict[str, str] = {
@@ -44,6 +57,70 @@ _COMMITTEE_DECISION_MAP: dict[str, str] = {
     "waitlist": "waitlist",
     "liste d'attente": "waitlist",
 }
+
+
+_TIER_LABELS: dict[str, str] = {
+    "A": "A) priority (auto from history)",
+    "B": "B) good (auto from history)",
+    "C": "C) low interest (auto from history)",
+    "X": "X) unknown (auto from history)",
+}
+
+
+def _fill_school_metadata_from_history(
+    dossier: DossierContent, gpa: GpaExtraction,
+) -> DossierContent:
+    """Use the LLM-extracted institution name to fill missing school metadata.
+
+    When ``dossier.school_name`` is empty (no parquet match for this
+    cohort), we look up the historical profiles table by the LLM-extracted
+    name. If a profile is found, fill ``school_name``/``school_country``/
+    ``school_quality``/``gpa_threshold``/``is_epfl_internal`` from it.
+    If no profile matches but the name is recognisably EPFL, set the
+    EPFL-internal flag anyway.
+
+    Returns a new ``DossierContent`` (input not mutated).
+    """
+    if dossier.school_name:
+        return dossier
+    name = gpa.institution_name
+    if not name or name == "unknown":
+        return dossier
+
+    profile = find_profile_by_name(_PROFILE_CACHE, name)
+    if profile is not None:
+        tier_label = _TIER_LABELS.get(profile.tier, _TIER_LABELS["X"])
+        logger.info(
+            "Profile fallback for {}: matched {!r} (tier {}, threshold {!r}, "
+            "epfl_internal={})",
+            dossier.candidate_id,
+            profile.name,
+            profile.tier,
+            profile.gpa_threshold,
+            profile.is_epfl_internal,
+        )
+        return dossier.model_copy(
+            update={
+                "school_name": profile.name,
+                "school_country": profile.country or dossier.school_country,
+                "school_quality": tier_label,
+                "gpa_threshold": profile.gpa_threshold,
+                "is_epfl_internal": profile.is_epfl_internal
+                or detect_epfl_internal(profile.name),
+            },
+        )
+
+    # No profile match — but the LLM's name itself can still flag EPFL.
+    if detect_epfl_internal(name):
+        logger.info(
+            "Profile fallback for {}: detected EPFL-internal from LLM name {!r}",
+            dossier.candidate_id, name,
+        )
+        return dossier.model_copy(
+            update={"school_name": name, "is_epfl_internal": True},
+        )
+
+    return dossier
 
 
 def _normalize_committee_decision(raw: str) -> str:
@@ -135,6 +212,10 @@ async def evaluate_single(
         }
     )
 
+    # Fallback enrichment when no parquet match: use the LLM's institution
+    # name to look up the historical profiles table.
+    dossier = _fill_school_metadata_from_history(dossier, gpa)
+
     # Prepend SPE metadata and GPA summary to transcript text
     enriched_transcript = dossier.transcript_text
 
@@ -169,6 +250,42 @@ async def evaluate_single(
         )
         spe_header_parts.append(gpa_summary)
 
+    # Deterministic GPA-vs-threshold comparison. Inject as a structured fact
+    # so the LLM stops doing scale arithmetic in its head.
+    #
+    # For EPFL-internal candidates the committee evaluates the
+    # algebra+analysis average, not the overall GPA. When the extractor
+    # populated per_subject_averages, prefer that as the gate input.
+    gate_value = gpa.gpa_value
+    gate_value_source = "overall GPA"
+    if dossier.is_epfl_internal:
+        epfl_value = epfl_internal_value(gpa.per_subject_averages)
+        if epfl_value is not None:
+            gate_value = epfl_value
+            gate_value_source = "algebra+analysis average (EPFL-internal rule)"
+    threshold_verdict = compare_to_threshold(
+        gpa_value=gate_value,
+        gpa_scale=gpa.gpa_scale,
+        threshold=dossier.gpa_threshold,
+        gpa_normalized=gpa.gpa_normalized if gpa.gpa_normalized > 0 else None,
+        school_name=dossier.school_name,
+    )
+    spe_header_parts.append(
+        f"## GPA Threshold Verdict (deterministic)\n\n"
+        f"- Compared value: {gate_value} ({gate_value_source})\n"
+        f"- {threshold_verdict.to_prompt_line()}\n"
+    )
+    spe_header_parts.extend(f"- Note: {note}\n" for note in threshold_verdict.notes)
+    spe_header_parts.append("\n---\n\n")
+    logger.info(
+        "Threshold verdict for {}: {} (gap {:+.2f}, system {}, source={})",
+        dossier.candidate_id,
+        threshold_verdict.direction.value,
+        threshold_verdict.gap,
+        threshold_verdict.system.value,
+        gate_value_source,
+    )
+
     if spe_header_parts:
         enriched_transcript = "".join(spe_header_parts) + dossier.transcript_text
 
@@ -189,6 +306,9 @@ async def evaluate_single(
         cv_text=dossier.cv_text,
         full_dossier_text=dossier.full_dossier_text,
         school_name=dossier.school_name,
+        is_epfl_internal=dossier.is_epfl_internal,
+        threshold_verdict=threshold_verdict,
+        gpa_confidence=gpa.confidence,
         model=model,
         base_url=base_url,
         api_key=api_key,
@@ -256,6 +376,9 @@ async def run_batch(
                     gpa.gpa_scale,
                 )
                 return (dossier, verdict)
+            except LLMBillingError:
+                logger.critical("Credits exhausted — aborting batch immediately")
+                raise
             except Exception:
                 logger.exception("Failed to evaluate {}", dossier.candidate_id)
                 return None

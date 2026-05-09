@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 from loguru import logger
 from pydantic import BaseModel
 
+from agentic_admission.agents.evaluation_profile import EXTERNAL_PROFILE, EvaluationProfile
+from agentic_admission.agents.gpa_gate import ThresholdDirection, ThresholdVerdict
 from agentic_admission.agents.llm_client import ChatMessage, complete
 from agentic_admission.agents.prompts import AGENT_PROMPTS
 from agentic_admission.models.evaluation import (
@@ -16,52 +18,222 @@ from agentic_admission.models.evaluation import (
     DebateEntry,
     DebateTranscript,
     Decision,
+    DimensionJustification,
     PanelVerdict,
     VerdictSummary,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     import httpx
 
 _MAX_DEBATE_ROUNDS = 2
+_DEFAULT_DIMENSION_SCORE: int = 5
 
+# Composite-score cutoffs for the deterministic decision rule. Calibrated
+# against the 2025-26-spring cohort (128 candidates) so the accept rate
+# (~37%) matches the committee's historical band of 40-50/128.
+ACCEPT_COMPOSITE_FLOOR: float = 8.0
+WAITLIST_COMPOSITE_FLOOR: float = 7.5
+"""Composite-score thresholds applied AFTER the LLM produces dimension scores.
 
-SCORING_WEIGHTS: dict[str, float] = {
-    "academic_strength": 0.25,
-    "institution_quality": 0.15,
-    "reference_quality": 0.15,
-    "calibration_confidence": 0.10,
-    "motivation_clarity": 0.05,
-    "program_fit": 0.05,
-    "risk_flags": 0.05,
-    "consistency": 0.05,
-}
-"""Explicit scoring weights for the composite score.
-
-Academic credentials and reference quality dominate (55% combined).
-Motivation, fit, risk, and consistency are minor tiebreakers (20% combined)
-— they should never override a strong academic profile.
-Calibration confidence (10%) modulates how much to trust reference scores.
+The LLM's own ``decision`` field is advisory: in the 2025-26-spring
+backtest the LLM returned 79/128 accepts under a stated rule that should
+have produced 57. We derive the decision deterministically from the
+composite to keep accept rates calibrated and reproducible.
 """
 
 
-def compute_composite(final_scores: dict[str, int]) -> float:
+def decision_from_composite(composite: float) -> Decision:
+    """Map a composite score to ``accept`` / ``waitlist`` / ``reject``.
+
+    Parameters
+    ----------
+    composite
+        Weighted dimension-score average, in [1.0, 10.0].
+
+    Returns
+    -------
+    Decision
+        ``ACCEPT`` if ``composite >= 8.0``, ``WAITLIST`` if
+        ``>= 7.5``, ``REJECT`` otherwise.
+
+    Notes
+    -----
+    Gate overrides (below-threshold reject, low-confidence waitlist) are
+    applied AFTER this rule via :func:`apply_gate_overrides` and take
+    precedence.
+    """
+    if composite >= ACCEPT_COMPOSITE_FLOOR:
+        return Decision.ACCEPT
+    if composite >= WAITLIST_COMPOSITE_FLOOR:
+        return Decision.WAITLIST
+    return Decision.REJECT
+
+
+def compute_composite(
+    final_scores: dict[str, int],
+    *,
+    weights: Mapping[str, float] | None = None,
+) -> float:
     """Compute deterministic weighted composite from dimension scores.
 
     Parameters
     ----------
     final_scores
         Dimension name to integer score (1-10).
+    weights
+        Per-dimension weights. Defaults to :data:`EXTERNAL_PROFILE.weights`.
+        The caller is expected to supply weights that sum to 1.0; the
+        :class:`~agentic_admission.agents.evaluation_profile.EvaluationProfile`
+        constructor enforces this.
 
     Returns
     -------
     float
         Weighted average clamped to 1.0-10.0.
     """
+    weights = weights or EXTERNAL_PROFILE.weights
     total = sum(
-        final_scores.get(dim, 5) * weight for dim, weight in SCORING_WEIGHTS.items()
+        final_scores.get(dim, _DEFAULT_DIMENSION_SCORE) * weight
+        for dim, weight in weights.items()
     )
     return max(1.0, min(10.0, round(total, 2)))
+
+
+_LOW_GPA_CONFIDENCE: float = 0.5
+"""GPA-extraction confidence below which we route to WAITLIST instead of trusting the score."""
+
+_BELOW_THRESHOLD_ACADEMIC_CAP: int = 4
+"""Maximum allowed ``academic_strength`` when the GPA is below the SPE threshold."""
+
+
+def apply_gate_overrides(
+    *,
+    decision: Decision,
+    pros: tuple[str, ...],
+    cons: tuple[str, ...],
+    threshold_verdict: ThresholdVerdict | None,
+    gpa_confidence: float,
+) -> tuple[Decision, tuple[str, ...], tuple[str, ...]]:
+    """Apply deterministic gates AFTER the Chair has produced a synthesis.
+
+    Two policies, applied in order:
+
+    1. **Confidence gate.** When the GPA extractor is unsure
+       (``gpa_confidence < 0.5``), the LLM's accept/reject is unsafe;
+       route to ``WAITLIST`` for committee review.
+    2. **Below-threshold hard reject.** When the gate verdict is BELOW
+       and confidence is sufficient, force ``REJECT`` regardless of what
+       the Chair said. The committee's policy ("below the bar = refused")
+       is mechanical and we encode it deterministically.
+
+    Returns
+    -------
+    tuple[Decision, tuple[str, ...], tuple[str, ...]]
+        Possibly-modified ``(decision, pros, cons)``. ``cons`` is appended
+        with a one-line audit trail when an override fires.
+    """
+    if gpa_confidence < _LOW_GPA_CONFIDENCE:
+        new_cons = (
+            *cons,
+            f"GPA extraction confidence too low ({gpa_confidence:.0%}) — "
+            "routed to waitlist for manual review.",
+        )
+        return Decision.WAITLIST, pros, new_cons
+
+    if (
+        threshold_verdict is not None
+        and threshold_verdict.direction is ThresholdDirection.BELOW
+    ):
+        new_cons = (
+            *cons,
+            f"GPA below SPE threshold (extracted {threshold_verdict.extracted_value} "
+            f"vs threshold {threshold_verdict.threshold_value}, "
+            f"gap {threshold_verdict.gap:+.2f}, system={threshold_verdict.system.value}) "
+            "— hard-reject by gate.",
+        )
+        return Decision.REJECT, pros, new_cons
+
+    return decision, pros, cons
+
+
+def clamp_academic_strength_below_threshold(
+    scorecards: tuple[AgentScorecard, ...],
+    *,
+    threshold_verdict: ThresholdVerdict | None,
+    gpa_confidence: float,
+) -> tuple[AgentScorecard, ...]:
+    """Clamp Academic Evaluator's ``academic_strength`` when GPA is below threshold.
+
+    Mirrors the post-synthesis hard-reject: if the gate says BELOW with
+    sufficient confidence, the Academic scorecard's ``academic_strength``
+    is capped at :data:`_BELOW_THRESHOLD_ACADEMIC_CAP`. The Chair sees the
+    capped value during synthesis, so it is unlikely to argue for an
+    accept that the gate would then override anyway. This mostly serves
+    to keep the Chair's reasoning consistent with the final decision.
+
+    Parameters
+    ----------
+    scorecards
+        Specialist scorecards from Phase 1.
+    threshold_verdict
+        Output of :func:`agentic_admission.agents.gpa_gate.compare_to_threshold`.
+    gpa_confidence
+        :attr:`GpaExtraction.confidence` from the extractor.
+
+    Returns
+    -------
+    tuple[AgentScorecard, ...]
+        New tuple of scorecards (the input is not mutated).
+    """
+    if threshold_verdict is None or threshold_verdict.direction is not ThresholdDirection.BELOW:
+        return scorecards
+    if gpa_confidence < _LOW_GPA_CONFIDENCE:
+        return scorecards
+
+    out: list[AgentScorecard] = []
+    for card in scorecards:
+        if card.role is AgentRole.ACADEMIC and "academic_strength" in card.scores:
+            new_scores = dict(card.scores)
+            current = new_scores["academic_strength"]
+            if current > _BELOW_THRESHOLD_ACADEMIC_CAP:
+                new_scores["academic_strength"] = _BELOW_THRESHOLD_ACADEMIC_CAP
+                out.append(card.model_copy(update={"scores": new_scores}))
+                continue
+        out.append(card)
+    return tuple(out)
+
+
+def make_skipped_reference_scorecard(reason: str) -> AgentScorecard:
+    """Build a sentinel scorecard for cases where the Reference evaluator was skipped.
+
+    The scorecard uses minimum-valid scores (1) so the
+    :class:`~agentic_admission.models.evaluation.AgentScorecard` validator
+    accepts it. The justifications carry an explicit ``reason`` so any
+    downstream consumer (UI, audit log, Chair prompt) can distinguish a
+    skipped evaluation from a genuinely weak letter.
+
+    Parameters
+    ----------
+    reason
+        Human-readable explanation (e.g. ``"EPFL-internal: letters not required"``).
+
+    Returns
+    -------
+    AgentScorecard
+        Sentinel scorecard for the Reference role.
+    """
+    cons = (f"Skipped: {reason}",)
+    return AgentScorecard(
+        role=AgentRole.REFERENCE,
+        scores={"reference_quality": 1, "calibration_confidence": 1},
+        justifications={
+            "reference_quality": DimensionJustification(pros=(), cons=cons),
+            "calibration_confidence": DimensionJustification(pros=(), cons=cons),
+        },
+    )
 
 
 class ChairSynthesis(BaseModel, frozen=True):
@@ -289,6 +461,9 @@ async def synthesize(
     model: str,
     base_url: str,
     client: httpx.AsyncClient | None = None,
+    profile: EvaluationProfile = EXTERNAL_PROFILE,
+    threshold_verdict: ThresholdVerdict | None = None,
+    gpa_confidence: float = 1.0,
 ) -> PanelVerdict:
     """Produce the final panel verdict.
 
@@ -306,6 +481,19 @@ async def synthesize(
         vLLM endpoint base URL.
     client
         Optional shared ``httpx.AsyncClient``.
+    profile
+        Scoring profile applied to the composite. Also surfaces in the
+        Chair's user prompt so the LLM understands which dimensions
+        carry weight (e.g. reference is zero-weighted for EPFL-internal
+        candidates and the prompt warns the Chair not to penalise a
+        sentinel reference scorecard).
+    threshold_verdict
+        Result of comparing the candidate's GPA to the SPE threshold. When
+        ``direction == BELOW`` (with sufficient ``gpa_confidence``), the
+        decision is forced to ``REJECT`` after the LLM synthesis runs.
+    gpa_confidence
+        Extractor confidence in [0, 1]. Below 0.5 routes the verdict to
+        ``WAITLIST`` regardless of what the LLM said.
 
     Returns
     -------
@@ -323,8 +511,22 @@ async def synthesize(
         debate_text = "\n\n".join(sections)
 
     weight_description = ", ".join(
-        f"{dim} ({w:.0%})" for dim, w in SCORING_WEIGHTS.items()
+        f"{dim} ({w:.0%})" for dim, w in profile.weights.items()
     )
+    profile_note = (
+        f"NOTE: This candidate is being scored under the {profile.name!r} profile. "
+        "The composite score is computed automatically using these "
+        f"weights: {weight_description}. Academic credentials carry the most "
+        "weight. A strong transcript should not be penalised by a weak motivation "
+        "letter."
+    )
+    if profile.skip_reference:
+        profile_note += (
+            "\n\nIMPORTANT: This candidate's reference dimensions are "
+            "zero-weighted (no/insufficient recommendation letters submitted). "
+            "Do NOT lower the recommendation because reference scores are 1 — "
+            "the Reference scorecard is a sentinel placeholder."
+        )
 
     messages = [
         ChatMessage(role="system", content=AGENT_PROMPTS[AgentRole.CHAIR]),
@@ -339,10 +541,7 @@ async def synthesize(
                 "- decision: one of 'accept', 'reject', or 'waitlist'\n"
                 "- pros: array of 2-5 bullet points summarising key strengths\n"
                 "- cons: array of 0-5 bullet points summarising concerns\n\n"
-                "NOTE: The composite score is computed automatically using these "
-                f"weights: {weight_description}. Academic credentials and "
-                "reference quality carry the most weight. A strong transcript "
-                "should not be penalised by a weak motivation letter.\n\n"
+                f"{profile_note}\n\n"
                 f"## Specialist Scorecards\n\n{formatted_cards}\n\n"
                 f"## Debate Transcripts\n\n{debate_text or '(no debates needed)'}"
             ),
@@ -368,8 +567,45 @@ async def synthesize(
         "consistency": synthesis.consistency,
     }
 
-    composite = compute_composite(final_scores)
-    logger.info("Composite score for {}: {:.2f}", candidate_id, composite)
+    composite = compute_composite(final_scores, weights=profile.weights)
+    logger.info(
+        "Composite score for {} ({}): {:.2f}", candidate_id, profile.name, composite
+    )
+
+    # Derive the decision deterministically from the composite. The LLM's
+    # own decision field is advisory only — in the 2025-26-spring backtest
+    # it was ~40% more lenient than its own stated accept rule. The
+    # composite-based rule keeps accept rates calibrated to the committee's
+    # historical band.
+    composite_decision = decision_from_composite(composite)
+    if composite_decision is not synthesis.decision:
+        logger.info(
+            "Composite rule for {}: {} -> {} (composite={:.2f})",
+            candidate_id,
+            synthesis.decision.value,
+            composite_decision.value,
+            composite,
+        )
+
+    # Then layer gate overrides on top: BELOW threshold forces reject,
+    # low GPA confidence forces waitlist. These take precedence over the
+    # composite rule.
+    final_decision, final_pros, final_cons = apply_gate_overrides(
+        decision=composite_decision,
+        pros=synthesis.pros,
+        cons=synthesis.cons,
+        threshold_verdict=threshold_verdict,
+        gpa_confidence=gpa_confidence,
+    )
+    if final_decision is not composite_decision:
+        logger.info(
+            "Gate override for {}: {} -> {} (threshold={}, gpa_confidence={:.2f})",
+            candidate_id,
+            composite_decision.value,
+            final_decision.value,
+            threshold_verdict.direction.value if threshold_verdict else "n/a",
+            gpa_confidence,
+        )
 
     return PanelVerdict(
         candidate_id=candidate_id,
@@ -377,6 +613,6 @@ async def synthesize(
         debates=debates,
         final_scores=final_scores,
         composite_score=composite,
-        decision=synthesis.decision,
-        justification=VerdictSummary(pros=synthesis.pros, cons=synthesis.cons),
+        decision=final_decision,
+        justification=VerdictSummary(pros=final_pros, cons=final_cons),
     )

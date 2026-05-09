@@ -232,9 +232,37 @@ def get_minor_by_name(name: str) -> Minor | None:
     return None
 
 
+_MTE_MASTER_MINOR_NAME: str = "Management, Technology and Entrepreneurship"
+"""Name of the minor that mirrors the MTE master program itself.
+
+A candidate admitted to the MTE master cannot take this minor — it is
+the master's own curriculum re-packaged as a minor for OTHER programs'
+students. The minor advisor must filter it out.
+"""
+
+
+def is_mte_master_minor(minor_name: str) -> bool:
+    """Return True when ``minor_name`` is the MTE master's mirror minor."""
+    if not minor_name:
+        return False
+    return minor_name.strip().lower() == _MTE_MASTER_MINOR_NAME.lower()
+
+
+def selectable_minors() -> tuple[Minor, ...]:
+    """Return the minors a candidate can be assigned to.
+
+    Excludes :data:`_MTE_MASTER_MINOR_NAME` because the candidate is being
+    admitted to that master — they cannot also pick it as their minor.
+    """
+    return tuple(m for m in ALL_MINORS if not is_mte_master_minor(m.name))
+
+
 def format_minor_list() -> str:
-    """Format all minors as a numbered markdown list for LLM context."""
+    """Format selectable minors as a numbered markdown list for LLM context.
+
+    The MTE master's mirror minor is excluded — see :func:`selectable_minors`.
+    """
     lines: list[str] = []
-    for i, m in enumerate(ALL_MINORS, 1):
+    for i, m in enumerate(selectable_minors(), 1):
         lines.append(f"{i}. {m.name} ({m.minor_type}, section: {m.section_code})")
     return "\n".join(lines)

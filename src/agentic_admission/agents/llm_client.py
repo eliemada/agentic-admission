@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Literal
 
 import httpx
@@ -21,6 +22,10 @@ class LLMResponseError(LLMError):
 
 class LLMConnectionError(LLMError):
     """Transient connection/HTTP error after retries exhausted."""
+
+
+class LLMBillingError(LLMError):
+    """API returned 402 — credits exhausted, no point retrying."""
 
 
 class ChatMessage(BaseModel, frozen=True):
@@ -100,6 +105,51 @@ async def _post_with_retry(
     return response
 
 
+def _extract_json(text: str) -> dict | None:
+    """Try multiple strategies to extract a JSON object from LLM output.
+
+    Handles: raw JSON, markdown-fenced JSON, JSON embedded after thinking text.
+    """
+    cleaned = text.strip()
+
+    # Strategy 1: direct parse
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: strip markdown fences
+    if cleaned.startswith("```"):
+        first_newline = cleaned.index("\n") if "\n" in cleaned else len(cleaned)
+        inner = cleaned[first_newline + 1:]
+        if inner.rstrip().endswith("```"):
+            inner = inner.rstrip()[:-3].rstrip()
+        try:
+            return json.loads(inner)
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 3: find the first { and last } — extract JSON from mixed text
+    first_brace = cleaned.find("{")
+    last_brace = cleaned.rfind("}")
+    if first_brace != -1 and last_brace > first_brace:
+        candidate = cleaned[first_brace : last_brace + 1]
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 4: find JSON in markdown code block within text
+    fence_match = re.search(r"```(?:json)?\s*\n(.*?)\n```", cleaned, re.DOTALL)
+    if fence_match:
+        try:
+            return json.loads(fence_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
 async def complete[T: BaseModel](
     *,
     messages: list[ChatMessage],
@@ -108,7 +158,7 @@ async def complete[T: BaseModel](
     base_url: str,
     client: httpx.AsyncClient | None = None,
     temperature: float = 0.1,
-    max_tokens: int = 2048,
+    max_tokens: int = 16384,
 ) -> T:
     """Send a chat completion request and parse the response into a Pydantic model.
 
@@ -145,15 +195,28 @@ async def complete[T: BaseModel](
     from agentic_admission.config import settings
 
     schema = response_model.model_json_schema()
+    schema_json = json.dumps(schema, indent=2)
+
+    # Strong JSON-only instruction appended to system message
+    schema_instruction = (
+        "\n\n# CRITICAL OUTPUT FORMAT REQUIREMENT\n"
+        "You MUST respond with ONLY a valid JSON object. "
+        "No thinking, no explanation, no markdown fences, no text before or after. "
+        "Your entire response must be parseable by json.loads().\n\n"
+        f"Required JSON schema:\n{schema_json}"
+    )
+    formatted_messages = []
+    for m in messages:
+        if m.role == "system":
+            formatted_messages.append({"role": "system", "content": m.content + schema_instruction})
+        else:
+            formatted_messages.append(m.model_dump())
+
     payload: dict = {
         "model": model,
-        "messages": [m.model_dump() for m in messages],
+        "messages": formatted_messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {"name": response_model.__name__, "schema": schema},
-        },
     }
 
     if "openrouter" in base_url and settings.openrouter_provider:
@@ -176,6 +239,10 @@ async def complete[T: BaseModel](
             except Exception:
                 error_body = "(unreadable)"
             logger.warning("LLM HTTP {}: {}", exc.response.status_code, error_body)
+            if exc.response.status_code == 402:
+                raise LLMBillingError(
+                    "OpenRouter credits exhausted. Add more at https://openrouter.ai/settings/credits"
+                ) from exc
             msg = f"LLM request failed: {exc}"
             raise LLMConnectionError(msg) from exc
         except (httpx.ConnectError, httpx.ReadTimeout) as exc:
@@ -206,14 +273,13 @@ async def complete[T: BaseModel](
 
         logger.debug("LLM raw response: {}", raw_content[:500])
 
-        try:
-            parsed = json.loads(raw_content)
-        except json.JSONDecodeError as exc:
+        parsed = _extract_json(raw_content)
+        if parsed is None:
             if attempt < _max_llm_attempts:
                 logger.warning("LLM returned unparseable JSON (attempt {}/{}), retrying ...", attempt, _max_llm_attempts)
                 continue
             msg = f"LLM returned unparseable JSON: {raw_content[:200]}"
-            raise LLMResponseError(msg) from exc
+            raise LLMResponseError(msg)
 
         try:
             return response_model.model_validate(parsed)

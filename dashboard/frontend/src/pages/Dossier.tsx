@@ -6,7 +6,7 @@ import { PageHead } from "../components/PageHead";
 import { Download, Check } from "../components/icons";
 
 export function DossierPage() {
-  const { apiAvailable } = useAppContext();
+  const { apiAvailable, dossierTarget, clearDossierTarget } = useAppContext();
   const [semesters, setSemesters] = useState<string[]>([]);
   const [semester, setSemester] = useState("");
   const [candidates, setCandidates] = useState<string[]>([]);
@@ -17,23 +17,40 @@ export function DossierPage() {
   const [anonContent, setAnonContent] = useState("");
   const [viewMode, setViewMode] = useState<"text" | "anonymized" | "pdf">("text");
 
-  // Load semesters
+  // Load semesters. When a deep-link target is set (Review → "View
+  // Dossier"), select that semester instead of the latest.
   useEffect(() => {
     if (!apiAvailable) return;
     api.dossierSemesters().then((s) => {
       setSemesters(s);
-      if (s.length) setSemester(s[s.length - 1]); // default to latest
+      if (!s.length) return;
+      if (dossierTarget && s.includes(dossierTarget.semester)) {
+        setSemester(dossierTarget.semester);
+      } else {
+        setSemester(s[s.length - 1]);
+      }
     });
-  }, [apiAvailable]);
+  }, [apiAvailable, dossierTarget]);
 
-  // Load candidates for semester
+  // Load candidates for semester. Honour the deep-link target when the
+  // matching semester is loaded; otherwise default to the first candidate.
   useEffect(() => {
     if (!semester) return;
     api.dossierCandidates(semester).then((c) => {
       setCandidates(c);
-      if (c.length) setCandidate(c[0]);
+      if (!c.length) return;
+      if (
+        dossierTarget
+        && dossierTarget.semester === semester
+        && c.includes(dossierTarget.candidate)
+      ) {
+        setCandidate(dossierTarget.candidate);
+        clearDossierTarget(); // single-use
+      } else {
+        setCandidate(c[0]);
+      }
     });
-  }, [semester]);
+  }, [semester, dossierTarget, clearDossierTarget]);
 
   // Load documents for candidate
   useEffect(() => {

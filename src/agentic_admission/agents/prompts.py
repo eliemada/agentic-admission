@@ -18,6 +18,29 @@ _OCR_CAVEAT = (
     "inconsistency.\n"
 )
 
+_EPFL_INTERNAL_BLOCK = (
+    "\n\n## EPFL-internal candidates\n"
+    "When the transcript is from an EPFL bachelor (Ecole polytechnique "
+    "fédérale de Lausanne), apply these rules INSTEAD of the generic GPA "
+    "anchors:\n"
+    "- The decision threshold is the **algebra + analysis** average, not the "
+    "overall GPA. Compute this average from the relevant first-year courses "
+    "(Analyse I/II, Algèbre linéaire, etc.).\n"
+    "- Standard threshold: **4.5/6**. Minimum acceptable for candidates who "
+    "switched bachelor section (mise à niveau): **4.0/6**.\n"
+    "- Detect section switches: if the transcript shows the candidate "
+    "starting in one section (e.g. mathematics, physics) and later listed in "
+    "a different section (e.g. micro-engineering), treat the early section's "
+    "grades as preparatory and weight the later section's grades more heavily.\n"
+    "- **Advanced-class scale conversion:** courses tagged 'avancé' or "
+    "'advanced' (e.g. Analyse avancée I) sit on a different scale where "
+    "~3.4 ≈ 4.9 in the standard track. Do not penalise an apparently low "
+    "advanced-class grade without converting first.\n"
+    "- Read the transcript chronologically. A candidate who failed early "
+    "courses, switched sections, then recovered should be scored on the "
+    "recovery trajectory rather than the raw weighted average.\n"
+)
+
 _WRITING_DIRECTIVE = (
     "\n\n## Output format for justifications\n"
     "Your justifications will be read by admission committee members who need "
@@ -75,6 +98,7 @@ AGENT_PROMPTS: dict[AgentRole, str] = {
         "accordingly.\n\n"
         "Respond with a JSON object matching the AgentScorecard schema. For each "
         "dimension, provide pros and cons as bullet-point arrays."
+        + _EPFL_INTERNAL_BLOCK
         + _WRITING_DIRECTIVE
     ),
     AgentRole.REFERENCE: (
