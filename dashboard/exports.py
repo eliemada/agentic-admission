@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 from fpdf import FPDF
@@ -103,7 +103,7 @@ def _add_header_block(
 
     # Row 3: Metadata
     ws.merge_cells("D3:H3")
-    now = datetime.now(tz=timezone.utc).strftime("%d %B %Y, %H:%M UTC")
+    now = datetime.now(tz=UTC).strftime("%d %B %Y, %H:%M UTC")
     meta_cell = ws["D3"]
     meta_cell.value = f"Batch: {semester}  |  {row_count} records  |  Generated: {now}"
     meta_cell.font = Font(name="Calibri", size=9, italic=True, color="A1A1AA")
@@ -120,6 +120,62 @@ def _add_header_block(
     ws.row_dimensions[3].height = 16
 
     return 6  # data starts at row 6 (row 5 = spacer)
+
+
+_LINE_HEIGHT_PT: float = 15.0
+"""Approximate height per text line in Excel at the default font size (Calibri 11)."""
+
+_MIN_ROW_HEIGHT_PT: float = 22.0
+"""Minimum row height — keeps non-wrapping rows from looking cramped."""
+
+_MAX_ROW_HEIGHT_PT: float = 240.0
+"""Cap so a single very long pros/cons cell does not produce a 1000-pt row."""
+
+_VERTICAL_PADDING_PT: float = 6.0
+
+
+def _line_count(value: object, col_width: int) -> int:
+    r"""Estimate how many display lines a wrap-text cell will need.
+
+    Counts explicit ``\n`` line breaks and adds extra lines for soft-
+    wrapping when a single line exceeds the column width. ``col_width``
+    is the Excel column width (in characters at the default font), so
+    we treat it as the soft wrap point.
+    """
+    text = "" if value is None else str(value)
+    if not text:
+        return 1
+    # Conservative chars-per-line: column width measured in default-font
+    # characters; subtract a small margin for inter-character spacing.
+    wrap_at = max(8, col_width - 2)
+    lines = 0
+    for explicit in text.split("\n"):
+        if not explicit:
+            lines += 1
+            continue
+        # Ceil-divide explicit-line length by wrap point.
+        lines += max(1, (len(explicit) + wrap_at - 1) // wrap_at)
+    return lines
+
+
+def _row_height_for(values: list[object], wrap_columns: dict[int, int]) -> float:
+    """Compute a row height that fits every wrapping cell in the row.
+
+    Parameters
+    ----------
+    values
+        The row's flattened cell values, in column order.
+    wrap_columns
+        ``{1-indexed column number: column width in chars}`` for every
+        cell that uses ``wrap_text=True``.
+    """
+    max_lines = 1
+    for col_idx, col_width in wrap_columns.items():
+        # values is 0-indexed; col_idx is 1-indexed
+        if col_idx - 1 < len(values):
+            max_lines = max(max_lines, _line_count(values[col_idx - 1], col_width))
+    height = max_lines * _LINE_HEIGHT_PT + _VERTICAL_PADDING_PT
+    return min(_MAX_ROW_HEIGHT_PT, max(_MIN_ROW_HEIGHT_PT, height))
 
 
 def _write_table_header(ws: Worksheet, row: int, columns: list[tuple[str, int]]) -> None:
@@ -262,10 +318,18 @@ def candidates_to_excel(candidates: list[dict], semester: str = "") -> bytes:
 
     _write_table_header(ws, data_start, _CANDIDATE_COLS)
 
+    # Wrap-text columns and their widths (1-indexed). Comment (5),
+    # pros (20), cons (21). Widths come from _CANDIDATE_COLS below.
+    wrap_cols = {
+        col_idx + 1: width
+        for col_idx, (_, width) in enumerate(_CANDIDATE_COLS)
+        if (col_idx + 1) in {5, 20, 21}
+    }
+
     for row_offset, c in enumerate(candidates):
         row = data_start + 1 + row_offset
-        ws.row_dimensions[row].height = 40
         vals = _flatten_candidate(c)
+        ws.row_dimensions[row].height = _row_height_for(vals, wrap_cols)
         status = c.get("status", "")
         bg, fg = _STATUS_STYLES.get(status, (None, None))
 

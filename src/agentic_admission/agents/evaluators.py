@@ -24,36 +24,36 @@ class AcademicResponse(BaseModel, frozen=True):
     """Response schema for the Academic Evaluator."""
 
     academic_strength: int
-    academic_strength_justification: str
+    academic_strength_justification: str | dict
     institution_quality: int
-    institution_quality_justification: str
+    institution_quality_justification: str | dict
 
 
 class ReferenceResponse(BaseModel, frozen=True):
     """Response schema for the Reference Letter Specialist."""
 
     reference_quality: int
-    reference_quality_justification: str
+    reference_quality_justification: str | dict
     calibration_confidence: int
-    calibration_confidence_justification: str
+    calibration_confidence_justification: str | dict
 
 
 class MotivationResponse(BaseModel, frozen=True):
     """Response schema for the Motivation & Fit Evaluator."""
 
     motivation_clarity: int
-    motivation_clarity_justification: str
+    motivation_clarity_justification: str | dict
     program_fit: int
-    program_fit_justification: str
+    program_fit_justification: str | dict
 
 
 class DevilsAdvocateResponse(BaseModel, frozen=True):
     """Response schema for the Devil's Advocate."""
 
     risk_flags: int
-    risk_flags_justification: str
+    risk_flags_justification: str | dict
     consistency: int
-    consistency_justification: str
+    consistency_justification: str | dict
 
 
 def _response_to_scorecard(role: AgentRole, response: BaseModel) -> AgentScorecard:
@@ -81,7 +81,13 @@ def _response_to_scorecard(role: AgentRole, response: BaseModel) -> AgentScoreca
     for key, value in data.items():
         if key.endswith("_justification"):
             dim = key.removesuffix("_justification")
-            justifications[dim] = _parse_justification(str(value))
+            if isinstance(value, dict):
+                justifications[dim] = DimensionJustification(
+                    pros=tuple(value.get("pros", ())),
+                    cons=tuple(value.get("cons", ())),
+                )
+            else:
+                justifications[dim] = _parse_justification(str(value))
         else:
             scores[key] = max(1, min(10, int(value)))
 

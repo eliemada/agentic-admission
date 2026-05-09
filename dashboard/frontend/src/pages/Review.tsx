@@ -648,6 +648,7 @@ function DetailPanel({
   readonly overrides: Record<string, { decision: string; comment: string; updated_at: string }>;
   readonly onSaveOverride: (id: string, decision: string, comment: string) => void;
 }) {
+  const { navigateToDossier } = useAppContext();
   const [tab, setTab] = useState("summary");
   if (!c) return <div className="detail-panel"><div className="empty">Select a candidate to view details.</div></div>;
 
@@ -682,6 +683,14 @@ function DetailPanel({
           </div>
         </div>
         <div className="detail-actions">
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => navigateToDossier(c.id)}
+            title="Open this candidate in the Dossier Viewer"
+          >
+            <Book size={12} /> View Dossier
+          </button>
           <a href={api.candidatePdfUrl(c.id)} className="btn btn-sm" target="_blank" rel="noreferrer">
             <Download size={12} /> PDF Report
           </a>

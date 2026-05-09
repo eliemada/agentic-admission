@@ -70,9 +70,60 @@ class DossierContent(BaseModel, frozen=True):
     gpa_grading_system: str = ""
     gpa_institution: str = ""
     gpa_confidence: float = 0.0
+    is_epfl_internal: bool = False
 
 
 _SECTION_SEPARATOR = "\n\n---\n\n"
+
+# Substrings (lowercased) that mark a school as an EPFL bachelor source.
+# Kept narrow so partner / exchange institutions are not mis-classified.
+_EPFL_NAME_PATTERNS: tuple[str, ...] = (
+    "epfl",
+    "polytechnique fédérale de lausanne",
+    "polytechnique federale de lausanne",
+    "ecole polytechnique fédérale",
+    "ecole polytechnique federale",
+    "swiss federal institute of technology lausanne",
+)
+
+# Letters_text below this length is treated as effectively absent. Short
+# strings still appear when OCR captures only headers / footers from a
+# template letter file. The orchestrator uses this to decide whether the
+# Reference evaluator can run meaningfully.
+MIN_MEANINGFUL_LETTERS_LENGTH: int = 500
+
+
+def detect_epfl_internal(school_name: str) -> bool:
+    """Return ``True`` when ``school_name`` matches an EPFL bachelor source.
+
+    Detection is name-based rather than letter-presence-based: a small
+    minority of EPFL-internal candidates do submit letters, but the
+    committee still applies the internal scoring rules to them.
+
+    Parameters
+    ----------
+    school_name
+        Free-text school name from the Parquet (may be empty).
+
+    Returns
+    -------
+    bool
+        ``True`` when any known EPFL pattern is present.
+    """
+    if not school_name:
+        return False
+    haystack = school_name.lower()
+    return any(pattern in haystack for pattern in _EPFL_NAME_PATTERNS)
+
+
+def has_meaningful_letters(letters_text: str) -> bool:
+    """Whether ``letters_text`` contains enough content to evaluate.
+
+    OCR sometimes returns header-only fragments that look like letters
+    but cannot support a 1-10 score. This helper centralizes the cutoff
+    so the orchestrator and tests stay in sync.
+    """
+    return len(letters_text.strip()) >= MIN_MEANINGFUL_LETTERS_LENGTH
 
 
 def load_anonymized_dossier(candidate_dir: Path, semester: str) -> DossierContent:
@@ -263,6 +314,7 @@ def enrich_with_parquet(dossiers: list[DossierContent], parquet_path: Path) -> l
                         "gpa_threshold": candidate.gpa_scale,
                         "spe_remarks": candidate.spe_remarks,
                         "decision_final": decision,
+                        "is_epfl_internal": detect_epfl_internal(candidate.school_name),
                     },
                 ),
             )

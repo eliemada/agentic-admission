@@ -12,10 +12,14 @@ from typing import TYPE_CHECKING
 from loguru import logger
 from pydantic import BaseModel
 
+from agentic_admission.agents.epfl_minor_map import (
+    build_deterministic_recommendation,
+    detect_epfl_bachelor,
+)
 from agentic_admission.agents.llm_client import ChatMessage, complete
 from agentic_admission.curriculum.match_models import CurriculumMatchReport
 from agentic_admission.models.evaluation import MinorRecommendation, MinorScore
-from agentic_admission.models.minor import format_minor_list
+from agentic_admission.models.minor import format_minor_list, is_mte_master_minor
 
 if TYPE_CHECKING:
     import httpx
@@ -23,26 +27,38 @@ if TYPE_CHECKING:
     from agentic_admission.curriculum.models import Curriculum
 
 
-_MINOR_ADVISOR_PROMPT = """\
-You are the Minor Advisor on an MTE admissions panel at EPFL.
+_MTE_MASTER_EXCLUSION = (
+    "- The candidate is being admitted to the MTE master "
+    "(Management, Technology and Entrepreneurship). NEVER recommend the "
+    '"Management, Technology and Entrepreneurship" minor — a student '
+    "cannot take their own master program as a minor. The Available "
+    "Minors list below already excludes it.\n"
+)
 
-Your task: given a candidate's transcript, CV, and a curriculum match report
-that maps their courses to EPFL equivalents, recommend which EPFL disciplinary
-minor best fits their academic background.
 
-RULES:
-- Recommend exactly 3 minors, ranked by fit (best first).
-- Use the curriculum match report as your PRIMARY evidence — it shows which
-  EPFL courses the candidate's background covers and where the gaps are.
-- A good minor fit means the candidate already has the prerequisite knowledge
-  to succeed in that minor's courses.
-- The CV provides secondary context (work experience, projects, interests).
-- If the candidate studied Industrial Engineering and you are uncertain,
-  default to Systems Engineering (section MTE).
-- Each recommendation needs a fit_score (1-10) and reasoning that cites
-  specific matched courses or coverage areas from the report.
-- Return a JSON matching the MinorAdvisorResponse schema.
-"""
+_MINOR_ADVISOR_PROMPT = (
+    "You are the Minor Advisor on an MTE admissions panel at EPFL.\n\n"
+    "Your task: given a candidate's transcript, CV, and a curriculum match "
+    "report that maps their courses to EPFL equivalents, recommend which EPFL "
+    "disciplinary minor best fits their academic background.\n\n"
+    "RULES:\n"
+    "- Recommend exactly 3 minors, ranked by fit (best first).\n"
+    + _MTE_MASTER_EXCLUSION
+    + "- Use the curriculum match report as your PRIMARY evidence — it shows "
+    "which EPFL courses the candidate's background covers and where the gaps "
+    "are.\n"
+    "- A good minor fit means the candidate already has the prerequisite "
+    "knowledge to succeed in that minor's courses.\n"
+    "- The CV provides secondary context (work experience, projects, "
+    "interests).\n"
+    "- If the candidate studied Industrial Engineering and you are uncertain, "
+    "default to Systems Engineering (section MTE — note: this is a separate "
+    "minor from the MTE master program).\n"
+    "- Each recommendation needs a fit_score (1-10) and reasoning that cites "
+    "specific matched courses or coverage areas from the report.\n"
+    "- Return a JSON matching the MinorAdvisorResponse schema.\n"
+)
+
 
 _MINOR_ADVISOR_PROMPT_BASIC = (
     "You are the Minor Advisor on an MTE admissions panel at EPFL.\n\n"
@@ -50,11 +66,14 @@ _MINOR_ADVISOR_PROMPT_BASIC = (
     "disciplinary minor best fits their academic background and coursework.\n\n"
     "RULES:\n"
     "- Recommend exactly 3 minors, ranked by fit (best first).\n"
-    "- Base your recommendation primarily on courses taken and skills "
+    + _MTE_MASTER_EXCLUSION
+    + "- Base your recommendation primarily on courses taken and skills "
     "demonstrated in the transcript.\n"
-    "- The CV provides secondary context (work experience, projects, interests).\n"
+    "- The CV provides secondary context (work experience, projects, "
+    "interests).\n"
     "- If the candidate studied Industrial Engineering and you are uncertain, "
-    "default to Systems Engineering (section MTE).\n"
+    "default to Systems Engineering (section MTE — note: this is a separate "
+    "minor from the MTE master program).\n"
     "- Each recommendation needs a fit_score (1-10) and a one-sentence "
     "reasoning citing specific courses or experience.\n"
     "- Return a JSON matching the MinorAdvisorResponse schema.\n"
@@ -87,8 +106,15 @@ async def recommend_minor(
     client: httpx.AsyncClient | None = None,
     candidate_id: str = "",
     use_curriculum: bool = True,
+    is_epfl_internal: bool = False,
+    full_dossier_text: str = "",
 ) -> MinorRecommendation:
     """Recommend top-3 EPFL minors for a candidate.
+
+    EPFL-internal candidates are routed through a deterministic
+    section-adjacency table (see :mod:`agentic_admission.agents.epfl_minor_map`).
+    The LLM advisor only runs when the dossier is non-EPFL or the
+    bachelor cannot be detected from the synthese form.
 
     Parameters
     ----------
@@ -107,12 +133,33 @@ async def recommend_minor(
     use_curriculum
         If True and curriculum data exists, first match courses against
         EPFL and use the match report to ground recommendations.
+    is_epfl_internal
+        When ``True``, attempt the deterministic EPFL section-adjacency
+        mapping before falling back to the LLM.
+    full_dossier_text
+        Concatenated dossier markdown used to detect the EPFL bachelor.
+        Required for the deterministic short-circuit; ignored otherwise.
 
     Returns
     -------
     MinorRecommendation
         Ranked list of 3 recommended minors with scores and reasoning.
     """
+    if is_epfl_internal and full_dossier_text:
+        bachelor = detect_epfl_bachelor(full_dossier_text)
+        if bachelor is not None:
+            logger.info(
+                "Deterministic EPFL minor mapping for {}: bachelor={}",
+                candidate_id or "<unknown>",
+                bachelor,
+            )
+            return build_deterministic_recommendation(bachelor)
+        logger.info(
+            "EPFL-internal candidate {} but bachelor not detected — "
+            "falling back to LLM minor advisor",
+            candidate_id or "<unknown>",
+        )
+
     match_context = ""
 
     if use_curriculum:
@@ -159,7 +206,7 @@ async def recommend_minor(
         client=client,
     )
 
-    recommended = (
+    raw_recommended = (
         MinorScore(
             minor_name=response.minor_1_name,
             section_code=response.minor_1_section,
@@ -179,6 +226,23 @@ async def recommend_minor(
             reasoning=response.minor_3_reason,
         ),
     )
+
+    # Safety net: drop the MTE master mirror minor if the LLM still
+    # recommends it. Returns at most 2 in that case rather than promote
+    # a hallucinated 4th option.
+    recommended = tuple(s for s in raw_recommended if not is_mte_master_minor(s.minor_name))
+    if len(recommended) < len(raw_recommended):
+        dropped = [s.minor_name for s in raw_recommended if is_mte_master_minor(s.minor_name)]
+        logger.warning(
+            "Dropped MTE master minor from recommendations (LLM ignored exclusion): {}",
+            dropped,
+        )
+
+    if not recommended:
+        # Defensive: should never happen because we exclude MTE from the
+        # input list and ask for 3, but lock the contract anyway.
+        msg = "Minor advisor returned only the MTE master minor — empty after filter"
+        raise RuntimeError(msg)
 
     primary = recommended[0].minor_name
     logger.info("Minor recommendation: {} (score {})", primary, recommended[0].fit_score)
