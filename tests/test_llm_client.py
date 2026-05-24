@@ -72,8 +72,14 @@ class TestComplete:
         assert result.answer == "yes"
         assert result.score == 9
 
-    async def test_complete_sends_json_schema_in_request(self, mock_httpx_response):
-        messages = [ChatMessage(role="user", content="test")]
+    async def test_complete_injects_json_schema_into_system_prompt(self, mock_httpx_response):
+        # The client injects the required JSON schema into the system
+        # message rather than using OpenAI's ``response_format`` field —
+        # works with vLLM endpoints that don't support the latter.
+        messages = [
+            ChatMessage(role="system", content="You are a test agent."),
+            ChatMessage(role="user", content="test"),
+        ]
         await complete(
             messages=messages,
             response_model=DummyOutput,
@@ -82,7 +88,9 @@ class TestComplete:
         )
         call_kwargs = mock_httpx_response.post.call_args
         payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
-        assert payload["response_format"]["type"] == "json_schema"
+        system_content = next(m["content"] for m in payload["messages"] if m["role"] == "system")
+        assert "JSON" in system_content
+        assert "Required JSON schema" in system_content
 
     async def test_complete_raises_on_malformed_json(self, mocker: MockerFixture):
         response_json = {"choices": [{"message": {"content": "not valid json{{"}}]}

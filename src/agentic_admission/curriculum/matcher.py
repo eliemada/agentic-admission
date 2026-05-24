@@ -191,7 +191,7 @@ async def match_curriculum(
             model=model,
             base_url=base_url,
             client=effective_client,
-            max_tokens=8192,
+            max_tokens=32768,
         )
     finally:
         if managed_client is not None:

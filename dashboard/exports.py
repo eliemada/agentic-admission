@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fpdf import FPDF
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XlImage
-from openpyxl.styles import Alignment, Border, Font, NamedStyle, PatternFill, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -73,11 +73,7 @@ _thin_border = Border(
 
 
 def _add_header_block(
-    ws: Worksheet,
-    title: str,
-    subtitle: str,
-    semester: str,
-    row_count: int,
+    ws: Worksheet, title: str, subtitle: str, semester: str, row_count: int
 ) -> int:
     """Add a branded header block with logo, title, metadata. Returns the next row."""
     # Row 1: Logo + title
@@ -122,14 +118,15 @@ def _add_header_block(
     return 6  # data starts at row 6 (row 5 = spacer)
 
 
+# Approximate height per text line in Excel at the default font size
+# (Calibri 11).
 _LINE_HEIGHT_PT: float = 15.0
-"""Approximate height per text line in Excel at the default font size (Calibri 11)."""
 
+# Minimum row height -- keeps non-wrapping rows from looking cramped.
 _MIN_ROW_HEIGHT_PT: float = 22.0
-"""Minimum row height — keeps non-wrapping rows from looking cramped."""
 
+# Cap so a single very long pros/cons cell does not produce a 1000-pt row.
 _MAX_ROW_HEIGHT_PT: float = 240.0
-"""Cap so a single very long pros/cons cell does not produce a 1000-pt row."""
 
 _VERTICAL_PADDING_PT: float = 6.0
 
@@ -208,16 +205,16 @@ def _style_data_cell(
     color = fill_fg or "18181B"
     cell.font = Font(name=font_name, size=10, color=color)
     cell.alignment = Alignment(
-        horizontal="right" if align_right else "left",
-        vertical="center",
-        wrap_text=wrap,
+        horizontal="right" if align_right else "left", vertical="center", wrap_text=wrap
     )
     cell.border = _thin_border
     if fill_bg:
         cell.fill = PatternFill(start_color=fill_bg, end_color=fill_bg, fill_type="solid")
     # Zebra striping
     elif row % 2 == 0:
-        cell.fill = PatternFill(start_color=_BG_SUBHEADER, end_color=_BG_SUBHEADER, fill_type="solid")
+        cell.fill = PatternFill(
+            start_color=_BG_SUBHEADER, end_color=_BG_SUBHEADER, fill_type="solid"
+        )
 
 
 def _finalize_sheet(ws: Worksheet, header_row: int, last_col: int) -> None:
@@ -252,10 +249,36 @@ _CANDIDATE_COLS: list[tuple[str, int]] = [
     ("Program Fit", 11),
     ("Risk Flags", 11),
     ("Consistency", 11),
-    ("Primary Minor", 20),
+    ("Primary Minor", 22),
+    ("Minor #1", 22),
+    ("Minor #1 Score", 9),
+    ("Minor #1 Reason", 50),
+    ("Minor #2", 22),
+    ("Minor #2 Score", 9),
+    ("Minor #2 Reason", 50),
+    ("Minor #3", 22),
+    ("Minor #3 Score", 9),
+    ("Minor #3 Reason", 50),
     ("Strengths", 45),
     ("Concerns", 45),
 ]
+
+
+def _minor_slot(minor: dict, idx: int) -> tuple[str, object, str]:
+    """Return ``(name, score, reason)`` for the i-th recommended minor.
+
+    Empty triple when the slot is missing — keeps row width constant so
+    the spreadsheet stays well-formed.
+    """
+    recs = minor.get("recommended") or []
+    if idx >= len(recs):
+        return ("", "", "")
+    entry = recs[idx] or {}
+    return (
+        entry.get("minor_name", "") or "",
+        entry.get("fit_score", "") if entry.get("fit_score") is not None else "",
+        entry.get("reasoning", "") or "",
+    )
 
 
 def _flatten_candidate(c: dict) -> list:
@@ -263,8 +286,11 @@ def _flatten_candidate(c: dict) -> list:
     scores = c.get("final_scores", {})
     confidence = c.get("confidence", 0)
     override = c.get("_override", {})
-    minor = c.get("minor_recommendation", {}) or {}
+    minor = c.get("minor_recommendation") or {}
     primary_minor = minor.get("primary_minor", "")
+    m1_name, m1_score, m1_reason = _minor_slot(minor, 0)
+    m2_name, m2_score, m2_reason = _minor_slot(minor, 1)
+    m3_name, m3_score, m3_reason = _minor_slot(minor, 2)
     return [
         c.get("candidate_name", "") or c.get("candidate_id", ""),
         c.get("school", ""),
@@ -285,6 +311,15 @@ def _flatten_candidate(c: dict) -> list:
         scores.get("risk_flags", ""),
         scores.get("consistency", ""),
         primary_minor,
+        m1_name,
+        m1_score,
+        m1_reason,
+        m2_name,
+        m2_score,
+        m2_reason,
+        m3_name,
+        m3_score,
+        m3_reason,
         "\n".join(f"+ {p}" for p in c.get("verdict_pros", [])),
         "\n".join(f"- {p}" for p in c.get("verdict_cons", [])),
     ]
@@ -318,12 +353,19 @@ def candidates_to_excel(candidates: list[dict], semester: str = "") -> bytes:
 
     _write_table_header(ws, data_start, _CANDIDATE_COLS)
 
-    # Wrap-text columns and their widths (1-indexed). Comment (5),
-    # pros (20), cons (21). Widths come from _CANDIDATE_COLS below.
+    # Column indices (1-indexed) — keep in sync with _CANDIDATE_COLS.
+    col_comment = 5
+    score_cols = range(11, 19)  # Academic..Consistency
+    minor_reason_cols = (22, 25, 28)
+    minor_score_cols = (21, 24, 27)
+    pros_cons_cols = (29, 30)
+    numeric_text_cols = (6, 7, 8, 9, 10)
+
+    wrap_indices = {col_comment, *minor_reason_cols, *pros_cons_cols}
     wrap_cols = {
         col_idx + 1: width
         for col_idx, (_, width) in enumerate(_CANDIDATE_COLS)
-        if (col_idx + 1) in {5, 20, 21}
+        if (col_idx + 1) in wrap_indices
     }
 
     for row_offset, c in enumerate(candidates):
@@ -336,18 +378,29 @@ def candidates_to_excel(candidates: list[dict], semester: str = "") -> bytes:
         for col_idx, val in enumerate(vals, 1):
             is_ai_decision = col_idx == 3
             is_committee_decision = col_idx == 4
-            is_comment = col_idx == 5
-            is_score = 11 <= col_idx <= 18
-            is_pros_cons = col_idx in (20, 21)
+            is_comment = col_idx == col_comment
+            is_score = col_idx in score_cols
+            is_minor_score = col_idx in minor_score_cols
+            is_minor_reason = col_idx in minor_reason_cols
+            is_pros_cons = col_idx in pros_cons_cols
 
             if is_ai_decision:
                 _style_data_cell(ws, row, col_idx, str(val).upper(), fill_bg=bg, fill_fg=fg)
             elif is_committee_decision:
                 comm_bg, comm_fg = _STATUS_STYLES.get(
-                    {"accept": "admit", "reject": "reject", "waitlist": "discuss"}.get(str(val).lower(), ""),
+                    {"accept": "admit", "reject": "reject", "waitlist": "discuss"}.get(
+                        str(val).lower(), ""
+                    ),
                     (None, None),
                 )
-                _style_data_cell(ws, row, col_idx, str(val).upper() if val else "", fill_bg=comm_bg, fill_fg=comm_fg)
+                _style_data_cell(
+                    ws,
+                    row,
+                    col_idx,
+                    str(val).upper() if val else "",
+                    fill_bg=comm_bg,
+                    fill_fg=comm_fg,
+                )
             elif is_comment:
                 _style_data_cell(ws, row, col_idx, val, wrap=True)
             elif is_score:
@@ -358,10 +411,21 @@ def candidates_to_excel(candidates: list[dict], semester: str = "") -> bytes:
                         score_bg, score_fg = _ADMIT_BG, _ADMIT_FG
                     elif val <= 4:
                         score_bg, score_fg = _REJECT_BG, _REJECT_FG
-                _style_data_cell(ws, row, col_idx, val, mono=True, align_right=True, fill_bg=score_bg, fill_fg=score_fg)
-            elif is_pros_cons:
+                _style_data_cell(
+                    ws,
+                    row,
+                    col_idx,
+                    val,
+                    mono=True,
+                    align_right=True,
+                    fill_bg=score_bg,
+                    fill_fg=score_fg,
+                )
+            elif is_minor_score:
+                _style_data_cell(ws, row, col_idx, val, mono=True, align_right=True)
+            elif is_minor_reason or is_pros_cons:
                 _style_data_cell(ws, row, col_idx, val, wrap=True)
-            elif col_idx in (6, 7, 8, 9, 10):
+            elif col_idx in numeric_text_cols:
                 _style_data_cell(ws, row, col_idx, val, mono=True, align_right=True)
             else:
                 _style_data_cell(ws, row, col_idx, val)
@@ -391,9 +455,16 @@ _COHORT_COLS: list[tuple[str, int]] = [
 ]
 
 _COHORT_KEYS = [
-    "full_name", "application_id", "gender", "nationality",
-    "institution_name", "institution_country", "field_of_study",
-    "study_level", "gpa", "gpa_max",
+    "full_name",
+    "application_id",
+    "gender",
+    "nationality",
+    "institution_name",
+    "institution_country",
+    "field_of_study",
+    "study_level",
+    "gpa",
+    "gpa_max",
 ]
 
 
@@ -464,7 +535,7 @@ def cohort_to_excel(cohort: list[dict], semester: str = "") -> bytes:
     # Country breakdown
     country_row = stats_start + len(stats) + 2
     summary.cell(row=country_row, column=1, value="Country Distribution").font = Font(
-        name="Calibri", size=11, bold=True, color=_BG_HEADER,
+        name="Calibri", size=11, bold=True, color=_BG_HEADER
     )
     countries: dict[str, int] = {}
     for c in cohort:
@@ -629,11 +700,7 @@ def candidate_to_pdf(candidate: dict) -> bytes:
     pdf.ln(2)
 
     # Status + composite
-    status_colors = {
-        "ADMIT": (22, 163, 74),
-        "REJECT": (220, 38, 38),
-        "DISCUSS": (217, 119, 6),
-    }
+    status_colors = {"ADMIT": (22, 163, 74), "REJECT": (220, 38, 38), "DISCUSS": (217, 119, 6)}
     r, g, b = status_colors.get(status, (113, 113, 122))
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(r, g, b)
@@ -700,8 +767,11 @@ def candidate_to_pdf(candidate: dict) -> bytes:
             pdf.set_text_color(82, 82, 91)
             score_parts = [f"{k.replace('_', ' ')}: {v}" for k, v in scores.items()]
             pdf.cell(
-                0, 5, _sanitize(f"avg {avg:.1f} -- {', '.join(score_parts)}"),
-                new_x="LMARGIN", new_y="NEXT",
+                0,
+                5,
+                _sanitize(f"avg {avg:.1f} -- {', '.join(score_parts)}"),
+                new_x="LMARGIN",
+                new_y="NEXT",
             )
 
     buf = io.BytesIO()

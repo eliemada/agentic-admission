@@ -59,7 +59,7 @@ async def _run(
 
     bachelor_count = sum(1 for p in curriculum.programs if p.level.value == "bachelor")
     minor_count = sum(1 for p in curriculum.programs if p.level.value == "minor")
-    print(  # noqa: T201
+    print(
         f"Curriculum loaded: {len(curriculum.programs)} programs "
         f"({bachelor_count} bachelors, {minor_count} minors), "
         f"{len(curriculum.courses)} courses"
@@ -74,16 +74,16 @@ async def _run(
         logger.error("No demo candidates found. Check data paths.")
         return
 
-    print(f"\nMatching {len(dossiers)} candidates against EPFL curriculum...\n")  # noqa: T201
+    print(f"\nMatching {len(dossiers)} candidates against EPFL curriculum...\n")
 
     for dossier in dossiers:
-        print("=" * 70)  # noqa: T201
-        print(f"  {dossier.candidate_id}")  # noqa: T201
-        print(f"  School: {dossier.school_name} ({dossier.school_country})")  # noqa: T201
-        print("=" * 70)  # noqa: T201
+        print("=" * 70)
+        print(f"  {dossier.candidate_id}")
+        print(f"  School: {dossier.school_name} ({dossier.school_country})")
+        print("=" * 70)
 
         if not dossier.transcript_text:
-            print("  ⚠ No transcript text — skipping\n")  # noqa: T201
+            print("  ⚠ No transcript text — skipping\n")
             continue
 
         try:
@@ -96,12 +96,12 @@ async def _run(
                 curriculum=curriculum,
             )
 
-            print(format_match_report(report))  # noqa: T201
-            print()  # noqa: T201
+            print(format_match_report(report))
+            print()
 
         except Exception:
             logger.exception("Failed to match {}", dossier.candidate_id)
-            print()  # noqa: T201
+            print()
 
 
 def main() -> None:
@@ -120,12 +120,12 @@ def main() -> None:
     base_url = args.base_url or settings.openrouter_base_url
     api_key = args.api_key or settings.openrouter_api_key
 
-    print("=" * 70)  # noqa: T201
-    print("  EPFL Curriculum Matching Demo")  # noqa: T201
-    print(f"  Model:    {model}")  # noqa: T201
-    print(f"  Endpoint: {base_url}")  # noqa: T201
-    print("=" * 70)  # noqa: T201
-    print()  # noqa: T201
+    print("=" * 70)
+    print("  EPFL Curriculum Matching Demo")
+    print(f"  Model:    {model}")
+    print(f"  Endpoint: {base_url}")
+    print("=" * 70)
+    print()
 
     asyncio.run(
         _run(

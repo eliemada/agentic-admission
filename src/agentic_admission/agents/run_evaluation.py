@@ -17,7 +17,12 @@ from agentic_admission.agents.dossier_loader import (
     load_all_anonymized_dossiers,
 )
 from agentic_admission.agents.gpa_extractor import GpaExtraction, extract_gpa
-from agentic_admission.agents.gpa_gate import compare_to_threshold, epfl_internal_value
+from agentic_admission.agents.gpa_gate import (
+    EpflInternalBand,
+    compare_to_threshold,
+    epfl_internal_band,
+    epfl_internal_value,
+)
 from agentic_admission.agents.llm_client import LLMBillingError
 from agentic_admission.agents.orchestrator import evaluate_candidate
 from agentic_admission.calibration.retriever import get_calibration_context
@@ -29,11 +34,11 @@ from agentic_admission.curriculum.university_profiles import (
 )
 from agentic_admission.models.evaluation import PanelVerdict
 
+# Module-level profile cache. Loaded once at import time;
+# ``find_profile_by_name`` hits this read-only dict per candidate without
+# re-reading JSON. The runner is restarted between evaluation batches
+# anyway, so freshness is fine.
 _PROFILE_CACHE = load_university_profiles()
-"""Module-level profile cache. Loaded once at import time; ``find_profile_by_name``
-hits this read-only dict per candidate without re-reading JSON. The runner
-is restarted between evaluation batches anyway, so freshness is fine.
-"""
 
 
 # Mapping from committee decision strings to normalized values
@@ -68,7 +73,7 @@ _TIER_LABELS: dict[str, str] = {
 
 
 def _fill_school_metadata_from_history(
-    dossier: DossierContent, gpa: GpaExtraction,
+    dossier: DossierContent, gpa: GpaExtraction
 ) -> DossierContent:
     """Use the LLM-extracted institution name to fill missing school metadata.
 
@@ -91,8 +96,7 @@ def _fill_school_metadata_from_history(
     if profile is not None:
         tier_label = _TIER_LABELS.get(profile.tier, _TIER_LABELS["X"])
         logger.info(
-            "Profile fallback for {}: matched {!r} (tier {}, threshold {!r}, "
-            "epfl_internal={})",
+            "Profile fallback for {}: matched {!r} (tier {}, threshold {!r}, epfl_internal={})",
             dossier.candidate_id,
             profile.name,
             profile.tier,
@@ -105,22 +109,53 @@ def _fill_school_metadata_from_history(
                 "school_country": profile.country or dossier.school_country,
                 "school_quality": tier_label,
                 "gpa_threshold": profile.gpa_threshold,
-                "is_epfl_internal": profile.is_epfl_internal
-                or detect_epfl_internal(profile.name),
-            },
+                "is_epfl_internal": profile.is_epfl_internal or detect_epfl_internal(profile.name),
+            }
         )
 
     # No profile match — but the LLM's name itself can still flag EPFL.
     if detect_epfl_internal(name):
         logger.info(
             "Profile fallback for {}: detected EPFL-internal from LLM name {!r}",
-            dossier.candidate_id, name,
+            dossier.candidate_id,
+            name,
         )
-        return dossier.model_copy(
-            update={"school_name": name, "is_epfl_internal": True},
-        )
+        return dossier.model_copy(update={"school_name": name, "is_epfl_internal": True})
 
     return dossier
+
+
+def _build_spe_header(dossier: DossierContent, gpa: GpaExtraction) -> list[str]:
+    """Build the SPE institutional + GPA summary section that prefixes the transcript."""
+    parts: list[str] = []
+    if dossier.school_quality or dossier.gpa_threshold:
+        parts.append("## EPFL SPE Institutional Assessment\n")
+        if dossier.school_quality:
+            parts.append(f"- Institution category: **{dossier.school_quality}**\n")
+        if dossier.gpa_threshold:
+            parts.append(
+                f"- GPA admission threshold for this institution: **{dossier.gpa_threshold}**\n"
+            )
+        if dossier.spe_remarks:
+            parts.append(f"- SPE remarks: {dossier.spe_remarks}\n")
+        parts.append(
+            "\nCandidates below the GPA threshold are normally rejected "
+            "unless exceptional circumstances justify an exception.\n"
+        )
+        parts.append("\n---\n\n")
+
+    if gpa.gpa_value != "N/A":
+        parts.append(
+            f"## Extracted GPA Summary\n\n"
+            f"- GPA: {gpa.gpa_value}/{gpa.gpa_scale} ({gpa.grading_system})\n"
+            f"- Normalized: {gpa.gpa_normalized:.1f}/100\n"
+            f"- Institution: {gpa.institution_name}\n"
+            f"- Degree: {gpa.degree_name}\n"
+            f"- Trajectory: {gpa.trajectory}\n"
+            f"- Notable courses: {gpa.notable_courses}\n"
+            f"- Extraction confidence: {gpa.confidence:.0%}\n\n---\n\n"
+        )
+    return parts
 
 
 def _normalize_committee_decision(raw: str) -> str:
@@ -220,35 +255,7 @@ async def evaluate_single(
     enriched_transcript = dossier.transcript_text
 
     # SPE institutional context (set by EPFL before any evaluation)
-    spe_header_parts: list[str] = []
-    if dossier.school_quality or dossier.gpa_threshold:
-        spe_header_parts.append("## EPFL SPE Institutional Assessment\n")
-        if dossier.school_quality:
-            spe_header_parts.append(f"- Institution category: **{dossier.school_quality}**\n")
-        if dossier.gpa_threshold:
-            spe_header_parts.append(
-                f"- GPA admission threshold for this institution: **{dossier.gpa_threshold}**\n"
-            )
-        if dossier.spe_remarks:
-            spe_header_parts.append(f"- SPE remarks: {dossier.spe_remarks}\n")
-        spe_header_parts.append(
-            "\nCandidates below the GPA threshold are normally rejected "
-            "unless exceptional circumstances justify an exception.\n"
-        )
-        spe_header_parts.append("\n---\n\n")
-
-    if gpa.gpa_value != "N/A":
-        gpa_summary = (
-            f"## Extracted GPA Summary\n\n"
-            f"- GPA: {gpa.gpa_value}/{gpa.gpa_scale} ({gpa.grading_system})\n"
-            f"- Normalized: {gpa.gpa_normalized:.1f}/100\n"
-            f"- Institution: {gpa.institution_name}\n"
-            f"- Degree: {gpa.degree_name}\n"
-            f"- Trajectory: {gpa.trajectory}\n"
-            f"- Notable courses: {gpa.notable_courses}\n"
-            f"- Extraction confidence: {gpa.confidence:.0%}\n\n---\n\n"
-        )
-        spe_header_parts.append(gpa_summary)
+    spe_header_parts = _build_spe_header(dossier, gpa)
 
     # Deterministic GPA-vs-threshold comparison. Inject as a structured fact
     # so the LLM stops doing scale arithmetic in its head.
@@ -258,11 +265,13 @@ async def evaluate_single(
     # populated per_subject_averages, prefer that as the gate input.
     gate_value = gpa.gpa_value
     gate_value_source = "overall GPA"
+    epfl_band: EpflInternalBand | None = None
     if dossier.is_epfl_internal:
         epfl_value = epfl_internal_value(gpa.per_subject_averages)
         if epfl_value is not None:
             gate_value = epfl_value
             gate_value_source = "algebra+analysis average (EPFL-internal rule)"
+        epfl_band = epfl_internal_band(gate_value)
     threshold_verdict = compare_to_threshold(
         gpa_value=gate_value,
         gpa_scale=gpa.gpa_scale,
@@ -275,15 +284,21 @@ async def evaluate_single(
         f"- Compared value: {gate_value} ({gate_value_source})\n"
         f"- {threshold_verdict.to_prompt_line()}\n"
     )
+    if epfl_band is not None:
+        spe_header_parts.append(
+            f"- EPFL-internal 3-band rule: **{epfl_band.value.upper()}** "
+            "(≥4.5 accept, 4.0-4.5 discuss, <4.0 reject)\n"
+        )
     spe_header_parts.extend(f"- Note: {note}\n" for note in threshold_verdict.notes)
     spe_header_parts.append("\n---\n\n")
     logger.info(
-        "Threshold verdict for {}: {} (gap {:+.2f}, system {}, source={})",
+        "Threshold verdict for {}: {} (gap {:+.2f}, system {}, source={}, epfl_band={})",
         dossier.candidate_id,
         threshold_verdict.direction.value,
         threshold_verdict.gap,
         threshold_verdict.system.value,
         gate_value_source,
+        epfl_band.value if epfl_band is not None else "n/a",
     )
 
     if spe_header_parts:
@@ -308,6 +323,7 @@ async def evaluate_single(
         school_name=dossier.school_name,
         is_epfl_internal=dossier.is_epfl_internal,
         threshold_verdict=threshold_verdict,
+        epfl_band=epfl_band,
         gpa_confidence=gpa.confidence,
         model=model,
         base_url=base_url,
@@ -520,7 +536,7 @@ def main() -> None:
     limit = args.limit or None
     logger.info("Loading anonymized dossiers (limit={}, semester={}) ...", limit, args.semester)
     dossiers = load_all_anonymized_dossiers(
-        args.anonymized_root, limit=limit, semester=args.semester,
+        args.anonymized_root, limit=limit, semester=args.semester
     )
 
     if not dossiers:

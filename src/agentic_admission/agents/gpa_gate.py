@@ -77,14 +77,14 @@ class ThresholdDirection(Enum):
 class GradingSystem(Enum):
     """Grading systems the gate can parse."""
 
-    US_4 = "us_4"            # 0.0 - 4.0, higher = better
-    SWISS_6 = "swiss_6"      # 1.0 - 6.0, higher = better
+    US_4 = "us_4"  # 0.0 - 4.0, higher = better
+    SWISS_6 = "swiss_6"  # 1.0 - 6.0, higher = better
     FRENCH_20 = "french_20"  # 0 - 20, higher = better
     GERMAN_1_5 = "german_1_5"  # 1.0 - 5.0, LOWER = better
     ITALIAN_30 = "italian_30"  # 18 - 30 (+ lode), higher = better
     INDIAN_10 = "indian_10"  # 0 - 10, higher = better
     PERCENTAGE = "percentage"  # 0 - 100
-    UK_CLASS = "uk_class"    # First / 2:1 / 2:2 / Third
+    UK_CLASS = "uk_class"  # First / 2:1 / 2:2 / Third
     UNKNOWN = "unknown"
 
 
@@ -154,9 +154,7 @@ def _to_float(token: str) -> float | None:
         return None
 
 
-def _parse_simple_scale(
-    raw: str, scale_pattern: str, lo: float, hi: float
-) -> float | None:
+def _parse_simple_scale(raw: str, scale_pattern: str, lo: float, hi: float) -> float | None:
     """Parse ``"value"`` or ``"value/scale"`` into a float clamped to ``[lo, hi]``."""
     match = re.match(rf"^\s*({_FLOAT_PATTERN})\s*(?:/\s*{scale_pattern})?\s*$", raw or "")
     if match is None:
@@ -264,28 +262,28 @@ class _SystemRule:
 
 _SYSTEM_RULES: dict[GradingSystem, _SystemRule] = {
     GradingSystem.US_4: _SystemRule(
-        parser=_parse_us_4, higher_is_better=True, near_window=0.10, label="US 4.0",
+        parser=_parse_us_4, higher_is_better=True, near_window=0.10, label="US 4.0"
     ),
     GradingSystem.SWISS_6: _SystemRule(
-        parser=_parse_swiss_6, higher_is_better=True, near_window=0.10, label="Swiss /6",
+        parser=_parse_swiss_6, higher_is_better=True, near_window=0.10, label="Swiss /6"
     ),
     GradingSystem.FRENCH_20: _SystemRule(
-        parser=_parse_french_20, higher_is_better=True, near_window=0.50, label="French /20",
+        parser=_parse_french_20, higher_is_better=True, near_window=0.50, label="French /20"
     ),
     GradingSystem.GERMAN_1_5: _SystemRule(
-        parser=_parse_german, higher_is_better=False, near_window=0.10, label="German 1-5",
+        parser=_parse_german, higher_is_better=False, near_window=0.10, label="German 1-5"
     ),
     GradingSystem.ITALIAN_30: _SystemRule(
-        parser=_parse_italian_30, higher_is_better=True, near_window=0.50, label="Italian /30",
+        parser=_parse_italian_30, higher_is_better=True, near_window=0.50, label="Italian /30"
     ),
     GradingSystem.INDIAN_10: _SystemRule(
-        parser=_parse_indian_10, higher_is_better=True, near_window=0.20, label="Indian CGPA /10",
+        parser=_parse_indian_10, higher_is_better=True, near_window=0.20, label="Indian CGPA /10"
     ),
     GradingSystem.PERCENTAGE: _SystemRule(
-        parser=_parse_percentage, higher_is_better=True, near_window=1.0, label="Percentage",
+        parser=_parse_percentage, higher_is_better=True, near_window=1.0, label="Percentage"
     ),
     GradingSystem.UK_CLASS: _SystemRule(
-        parser=_parse_uk_class, higher_is_better=True, near_window=5.0, label="UK classifications",
+        parser=_parse_uk_class, higher_is_better=True, near_window=5.0, label="UK classifications"
     ),
 }
 
@@ -427,15 +425,87 @@ def epfl_internal_value(per_subject: dict[str, float] | None) -> str | None:
     return f"{avg:.3f}"
 
 
+# ---------------------------------------------------------------------------
+# EPFL-internal 3-band rule (Geraldine, 2026-05-12)
+# ---------------------------------------------------------------------------
+#
+# Replaces the single 4.0 section-switcher threshold with three bands on
+# the algebra+analysis Swiss /6 average:
+#
+#   - ``>= 4.5``        → ACCEPT (meets the EPFL-master standard)
+#   - ``4.0 <= x < 4.5`` → DISCUSS (committee reviews in detail)
+#   - ``< 4.0``         → REJECT (auto-handled, hard floor)
+#
+# The 4.0 floor is the only true rejection bar; the 4.0-4.5 band must
+# reach the committee, not be auto-rejected. This is the rule that fired
+# (informally) when the committee admitted Etienne Maillard at 4.31.
+
+_EPFL_INTERNAL_ACCEPT_FLOOR: float = 4.5
+_EPFL_INTERNAL_REJECT_FLOOR: float = 4.0
+
+
+class EpflInternalBand(Enum):
+    """Three-band classification for an EPFL-internal MTE candidate.
+
+    Operates on the candidate's algebra + analysis average (Swiss /6).
+    Only the Swiss /6 scale is supported — EPFL-internal candidates by
+    definition come from EPFL bachelors, which always use this scale.
+    """
+
+    ACCEPT = "accept"
+    """Average ≥ 4.5 — meets the EPFL-master academic bar."""
+
+    DISCUSS = "discuss"
+    """4.0 ≤ average < 4.5 — committee reviews case-by-case."""
+
+    REJECT = "reject"
+    """Average < 4.0 — auto-rejected by the hard floor."""
+
+    UNKNOWN = "unknown"
+    """Average could not be parsed as a Swiss /6 grade."""
+
+
+def epfl_internal_band(value_str: str | None) -> EpflInternalBand:
+    """Classify an EPFL-internal candidate by the 3-band committee rule.
+
+    Parameters
+    ----------
+    value_str
+        Algebra + analysis average as a string parseable by the Swiss /6
+        parser (e.g. ``"4.31"`` or :func:`epfl_internal_value` output).
+
+    Returns
+    -------
+    EpflInternalBand
+        :data:`EpflInternalBand.ACCEPT`, :data:`DISCUSS`, :data:`REJECT`,
+        or :data:`UNKNOWN` when parsing fails.
+
+    Notes
+    -----
+    The thresholds (4.5 / 4.0) are committee policy, not parser tuning.
+    Changing them changes admissions outcomes — do so only when minutes
+    record a new rule.
+    """
+    if value_str is None:
+        return EpflInternalBand.UNKNOWN
+    val = _parse_swiss_6(value_str)
+    if val is None:
+        return EpflInternalBand.UNKNOWN
+    if val >= _EPFL_INTERNAL_ACCEPT_FLOOR:
+        return EpflInternalBand.ACCEPT
+    if val >= _EPFL_INTERNAL_REJECT_FLOOR:
+        return EpflInternalBand.DISCUSS
+    return EpflInternalBand.REJECT
+
+
 def _compare_via_normalized(
-    *, gpa_normalized: float, gpa_scale: str, threshold: str,
+    *, gpa_normalized: float, gpa_scale: str, threshold: str
 ) -> ThresholdVerdict:
     """Compare LLM-normalized GPA (0-100) against a percentage threshold."""
     threshold_val = _parse_percentage(threshold)
     if threshold_val is None:
         return _unknown(
-            GradingSystem.PERCENTAGE,
-            f"Could not parse percentage threshold {threshold!r}",
+            GradingSystem.PERCENTAGE, f"Could not parse percentage threshold {threshold!r}"
         )
     gap = gpa_normalized - threshold_val
     direction = _classify_gap(gap, _SYSTEM_RULES[GradingSystem.PERCENTAGE].near_window)
@@ -453,9 +523,7 @@ def _compare_via_normalized(
     )
 
 
-def _systems_match(
-    threshold_system: GradingSystem, gpa_scale: str, gpa_value: str,
-) -> bool:
+def _systems_match(threshold_system: GradingSystem, gpa_scale: str, gpa_value: str) -> bool:
     """Whether the candidate's scale + value are consistent with the threshold's system.
 
     The percentage parser accepts any number in [0, 100], which silently
@@ -541,7 +609,7 @@ def compare_to_threshold(
         and not _systems_match(system, gpa_scale, gpa_value)
     ):
         return _compare_via_normalized(
-            gpa_normalized=gpa_normalized, gpa_scale=gpa_scale, threshold=threshold,
+            gpa_normalized=gpa_normalized, gpa_scale=gpa_scale, threshold=threshold
         )
 
     extracted = rule.parser(gpa_value)

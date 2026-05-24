@@ -177,7 +177,7 @@ def load_anonymized_dossier(candidate_dir: Path, semester: str) -> DossierConten
         folder_name=candidate_dir.name,
         transcript_text=_SECTION_SEPARATOR.join(texts_by_type.get(DocumentType.TRANSCRIPT, [])),
         letters_text=_SECTION_SEPARATOR.join(
-            texts_by_type.get(DocumentType.RECOMMENDATION_LETTER, []),
+            texts_by_type.get(DocumentType.RECOMMENDATION_LETTER, [])
         ),
         motivation_text=next(iter(texts_by_type.get(DocumentType.MOTIVATION_LETTER, [])), ""),
         cv_text=next(iter(texts_by_type.get(DocumentType.CV, [])), ""),
@@ -186,10 +186,7 @@ def load_anonymized_dossier(candidate_dir: Path, semester: str) -> DossierConten
 
 
 def load_all_anonymized_dossiers(
-    anonymized_root: Path,
-    *,
-    limit: int | None = None,
-    semester: str | None = None,
+    anonymized_root: Path, *, limit: int | None = None, semester: str | None = None
 ) -> list[DossierContent]:
     """Scan the anonymized root and load all candidate dossiers.
 
@@ -288,7 +285,7 @@ def enrich_with_parquet(dossiers: list[DossierContent], parquet_path: Path) -> l
     ]
 
     matched, _unmatched_dossiers, _unmatched_candidates = match_dossiers_to_candidates(
-        stub_dossiers, candidates,
+        stub_dossiers, candidates
     )
 
     # Build a lookup from (semester, folder_name) → matched CandidateRecord
@@ -315,8 +312,8 @@ def enrich_with_parquet(dossiers: list[DossierContent], parquet_path: Path) -> l
                         "spe_remarks": candidate.spe_remarks,
                         "decision_final": decision,
                         "is_epfl_internal": detect_epfl_internal(candidate.school_name),
-                    },
-                ),
+                    }
+                )
             )
         else:
             enriched.append(dossier)

@@ -397,8 +397,7 @@ def filter_academic_codes(text: str, results: list[Any]) -> list[Any]:
     return [
         r
         for r in results
-        if r.entity_type != "PASSPORT"
-        or not _ACADEMIC_CODE_PATTERN.match(text[r.start : r.end])
+        if r.entity_type != "PASSPORT" or not _ACADEMIC_CODE_PATTERN.match(text[r.start : r.end])
     ]
 
 

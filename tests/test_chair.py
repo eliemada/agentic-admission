@@ -9,29 +9,23 @@ import pytest
 from agentic_admission.agents.chair import detect_disagreements, moderate_debate, synthesize
 from agentic_admission.models.evaluation import (
     AgentRole,
-    AgentScorecard,
     Conflict,
     DebateEntry,
     DebateTranscript,
     Decision,
     PanelVerdict,
 )
+from tests.conftest import make_scorecard
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
 
-def _make_scorecard(role: AgentRole, scores: dict[str, int]) -> AgentScorecard:
-    return AgentScorecard(
-        role=role, scores=scores, justifications=dict.fromkeys(scores, "test justification")
-    )
-
-
 SAMPLE_SCORECARDS = (
-    _make_scorecard(AgentRole.ACADEMIC, {"academic_strength": 8, "institution_quality": 7}),
-    _make_scorecard(AgentRole.REFERENCE, {"reference_quality": 7, "calibration_confidence": 6}),
-    _make_scorecard(AgentRole.MOTIVATION, {"motivation_clarity": 8, "program_fit": 7}),
-    _make_scorecard(AgentRole.DEVILS_ADVOCATE, {"risk_flags": 9, "consistency": 8}),
+    make_scorecard(AgentRole.ACADEMIC, {"academic_strength": 8, "institution_quality": 7}),
+    make_scorecard(AgentRole.REFERENCE, {"reference_quality": 7, "calibration_confidence": 6}),
+    make_scorecard(AgentRole.MOTIVATION, {"motivation_clarity": 8, "program_fit": 7}),
+    make_scorecard(AgentRole.DEVILS_ADVOCATE, {"risk_flags": 9, "consistency": 8}),
 )
 
 
@@ -66,14 +60,12 @@ class TestDetectDisagreements:
 class TestModerateDebate:
     @pytest.fixture
     def _mock_llm_debate(self, mocker: MockerFixture) -> None:
+        from agentic_admission.agents.chair import DebateArgument
+
         async def fake_complete(
             *, messages: Any, response_model: Any, model: Any, base_url: Any, **kwargs: Any
-        ) -> AgentScorecard:
-            return AgentScorecard(
-                role=AgentRole.REFERENCE,
-                scores={"reference_quality": 7},
-                justifications={"reference_quality": "After debate, I maintain my position."},
-            )
+        ) -> DebateArgument:
+            return DebateArgument(argument="After debate, I maintain my position.")
 
         mocker.patch("agentic_admission.agents.chair.complete", side_effect=fake_complete)
 
@@ -96,29 +88,26 @@ class TestModerateDebate:
 class TestSynthesize:
     @pytest.fixture
     def _mock_llm_verdict(self, mocker: MockerFixture) -> None:
-        verdict = PanelVerdict(
-            candidate_id="test_candidate",
-            scorecards=(),
-            debates=(),
-            final_scores={
-                "academic_strength": 8,
-                "institution_quality": 7,
-                "reference_quality": 7,
-                "calibration_confidence": 6,
-                "motivation_clarity": 8,
-                "program_fit": 7,
-                "risk_flags": 9,
-                "consistency": 8,
-            },
-            composite_score=7.5,
+        from agentic_admission.agents.chair import ChairSynthesis
+
+        synthesis = ChairSynthesis(
+            academic_strength=8,
+            institution_quality=7,
+            reference_quality=7,
+            calibration_confidence=6,
+            motivation_clarity=8,
+            program_fit=7,
+            risk_flags=9,
+            consistency=8,
             decision=Decision.ACCEPT,
-            justification="Strong candidate overall.",
+            pros=("Strong candidate overall.",),
+            cons=(),
         )
 
         async def fake_complete(
             *, messages: Any, response_model: Any, model: Any, base_url: Any, **kwargs: Any
-        ) -> PanelVerdict:
-            return verdict
+        ) -> ChairSynthesis:
+            return synthesis
 
         mocker.patch("agentic_admission.agents.chair.complete", side_effect=fake_complete)
 
@@ -132,7 +121,9 @@ class TestSynthesize:
             base_url="http://test",
         )
         assert isinstance(verdict, PanelVerdict)
-        assert verdict.decision == Decision.ACCEPT
+        # Composite (7.39) falls in the WAITLIST band; the deterministic
+        # composite rule overrides the LLM's stated ACCEPT.
+        assert verdict.decision == Decision.WAITLIST
         assert len(verdict.final_scores) == 8
 
 
@@ -141,29 +132,26 @@ class TestSynthesizeWithDebates:
 
     @pytest.fixture
     def _mock_llm_verdict_with_debates(self, mocker: MockerFixture) -> None:
-        verdict = PanelVerdict(
-            candidate_id="test_candidate",
-            scorecards=(),
-            debates=(),
-            final_scores={
-                "academic_strength": 7,
-                "institution_quality": 6,
-                "reference_quality": 6,
-                "calibration_confidence": 5,
-                "motivation_clarity": 7,
-                "program_fit": 6,
-                "risk_flags": 8,
-                "consistency": 7,
-            },
-            composite_score=6.5,
+        from agentic_admission.agents.chair import ChairSynthesis
+
+        synthesis = ChairSynthesis(
+            academic_strength=7,
+            institution_quality=6,
+            reference_quality=6,
+            calibration_confidence=5,
+            motivation_clarity=7,
+            program_fit=6,
+            risk_flags=8,
+            consistency=7,
             decision=Decision.WAITLIST,
-            justification="Borderline after debate consideration.",
+            pros=("Borderline after debate consideration.",),
+            cons=(),
         )
 
         async def fake_complete(
             *, messages: Any, response_model: Any, model: Any, base_url: Any, **kwargs: Any
-        ) -> PanelVerdict:
-            return verdict
+        ) -> ChairSynthesis:
+            return synthesis
 
         mocker.patch("agentic_admission.agents.chair.complete", side_effect=fake_complete)
 
@@ -195,6 +183,8 @@ class TestSynthesizeWithDebates:
             base_url="http://test",
         )
         assert isinstance(verdict, PanelVerdict)
-        assert verdict.decision == Decision.WAITLIST
+        # Composite (6.39) falls in the REJECT band; the deterministic
+        # composite rule overrides the LLM's stated WAITLIST.
+        assert verdict.decision == Decision.REJECT
         assert len(verdict.debates) == 1
         assert verdict.debates[0].conflict_dimension == "reference_quality"

@@ -23,22 +23,32 @@ _EPFL_INTERNAL_BLOCK = (
     "When the transcript is from an EPFL bachelor (Ecole polytechnique "
     "fédérale de Lausanne), apply these rules INSTEAD of the generic GPA "
     "anchors:\n"
-    "- The decision threshold is the **algebra + analysis** average, not the "
+    "- The decision signal is the **algebra + analysis** average, not the "
     "overall GPA. Compute this average from the relevant first-year courses "
     "(Analyse I/II, Algèbre linéaire, etc.).\n"
-    "- Standard threshold: **4.5/6**. Minimum acceptable for candidates who "
-    "switched bachelor section (mise à niveau): **4.0/6**.\n"
-    "- Detect section switches: if the transcript shows the candidate "
-    "starting in one section (e.g. mathematics, physics) and later listed in "
-    "a different section (e.g. micro-engineering), treat the early section's "
-    "grades as preparatory and weight the later section's grades more heavily.\n"
+    "- **3-band committee rule (Geraldine, 2026-05-12):**\n"
+    "  * algebra+analysis avg **≥ 4.5/6** → accept on the academic bar\n"
+    "  * **4.0 ≤ avg < 4.5** → committee discuss zone (look at the detailed "
+    "grades: a 5.25 in Analyse II offsetting a 3.75 in Analyse I is the kind "
+    "of case the committee admits)\n"
+    "  * **avg < 4.0** → automatic reject\n"
+    "  This replaces the old single 4.0 section-switcher threshold. A "
+    "candidate at 4.31 (e.g. Maillard 2025) is in the discuss zone, not a "
+    "reject — do not score academic_strength below 5 just because the avg "
+    "is under 4.5.\n"
+    "- Specifically because the candidate is leaving their original section "
+    "for MTE, weak grades in advanced *section-specific* courses (e.g. "
+    "Mécanique des Structures for a GM bachelor moving to MTE) carry less "
+    "weight than transferable signals: math (Analyse, Algèbre), project "
+    "work, leadership, motivation fit. The committee accepts this trade-off; "
+    "you should too.\n"
     "- **Advanced-class scale conversion:** courses tagged 'avancé' or "
     "'advanced' (e.g. Analyse avancée I) sit on a different scale where "
     "~3.4 ≈ 4.9 in the standard track. Do not penalise an apparently low "
     "advanced-class grade without converting first.\n"
     "- Read the transcript chronologically. A candidate who failed early "
-    "courses, switched sections, then recovered should be scored on the "
-    "recovery trajectory rather than the raw weighted average.\n"
+    "courses then recovered should be scored on the recovery trajectory "
+    "rather than the raw weighted average.\n"
 )
 
 _WRITING_DIRECTIVE = (
@@ -56,8 +66,7 @@ _WRITING_DIRECTIVE = (
     "- No filler phrases (it is worth noting, at its core, the reality is).\n"
     "- No hedging (somewhat, relatively, to some extent).\n"
     "- No em dashes. No rhetorical three-item lists.\n"
-    "- If there are no cons, return an empty array.\n"
-    + _OCR_CAVEAT
+    "- If there are no cons, return an empty array.\n" + _OCR_CAVEAT
 )
 
 AGENT_PROMPTS: dict[AgentRole, str] = {
@@ -121,8 +130,7 @@ AGENT_PROMPTS: dict[AgentRole, str] = {
         "Compare the candidate's letters against the historical examples provided. "
         "Look for specificity, concrete examples, and evidence of genuine familiarity "
         "with the candidate.\n\n"
-        "Respond with a JSON object matching the AgentScorecard schema."
-        + _WRITING_DIRECTIVE
+        "Respond with a JSON object matching the AgentScorecard schema." + _WRITING_DIRECTIVE
     ),
     AgentRole.MOTIVATION: (
         "You are the Motivation & Fit Evaluator on an MTE admissions panel at EPFL. "
@@ -138,8 +146,7 @@ AGENT_PROMPTS: dict[AgentRole, str] = {
         "- program_fit (1-10): How well the candidate's background, skills, and goals "
         "align with MTE's interdisciplinary focus. Consider technical depth, business "
         "awareness, and entrepreneurial mindset.\n\n"
-        "Respond with a JSON object matching the AgentScorecard schema."
-        + _WRITING_DIRECTIVE
+        "Respond with a JSON object matching the AgentScorecard schema." + _WRITING_DIRECTIVE
     ),
     AgentRole.DEVILS_ADVOCATE: (
         "You are the Devil's Advocate on an MTE admissions panel at EPFL. "
@@ -162,8 +169,7 @@ AGENT_PROMPTS: dict[AgentRole, str] = {
         "Focus on SUBSTANTIVE risks: fabricated claims, grade manipulation, "
         "contradictory narratives across documents written by different people. "
         "Do not flag formatting issues or minor clerical discrepancies.\n\n"
-        "Respond with a JSON object matching the AgentScorecard schema."
-        + _WRITING_DIRECTIVE
+        "Respond with a JSON object matching the AgentScorecard schema." + _WRITING_DIRECTIVE
     ),
     AgentRole.CHAIR: (
         "You are the Chair of the MTE admissions panel at EPFL. You have two "
@@ -192,7 +198,6 @@ AGENT_PROMPTS: dict[AgentRole, str] = {
         "The composite score is computed automatically using fixed weights "
         "(academic 25%, institution 15%, reference 15% = 55% primary). Your "
         "job is to assign accurate dimension scores and make the final call.\n\n"
-        "Respond with a JSON object matching the requested schema."
-        + _WRITING_DIRECTIVE
+        "Respond with a JSON object matching the requested schema." + _WRITING_DIRECTIVE
     ),
 }

@@ -23,22 +23,13 @@ _ANON_ROOT = Path("data/processed/anonymized/2025-26-spring")
 # the legacy "Génie chimique"/"Chimie" splits that the unified
 # "Chimie et génie chimique" bachelor descends from.
 _BACHELOR_TO_MINORS: dict[str, tuple[str, tuple[str, str, str]]] = {
-    "Informatique": (
-        "IN",
-        ("Computer Science", "Cyber Security", "Data Science"),
-    ),
+    "Informatique": ("IN", ("Computer Science", "Cyber Security", "Data Science")),
     "Systèmes de communication": (
         "SC",
         ("Data Science", "Cyber Security", "Communication Systems"),
     ),
-    "Mathématiques": (
-        "MA",
-        ("Mathematics", "Statistics", "Computational Science and Engineering"),
-    ),
-    "Physique": (
-        "PH",
-        ("Physics", "Quantum Science and Engineering", "Photonics"),
-    ),
+    "Mathématiques": ("MA", ("Mathematics", "Statistics", "Computational Science and Engineering")),
+    "Physique": ("PH", ("Physics", "Quantum Science and Engineering", "Photonics")),
     "Génie électrique et électronique": (
         "EL",
         (
@@ -51,17 +42,10 @@ _BACHELOR_TO_MINORS: dict[str, tuple[str, tuple[str, str, str]]] = {
         "GM",
         ("Mechanical Engineering", "Energy", "Materials Science and Engineering"),
     ),
-    "Microtechnique": (
-        "MT",
-        ("Microengineering", "Photonics", "Biomedical Technologies"),
-    ),
+    "Microtechnique": ("MT", ("Microengineering", "Photonics", "Biomedical Technologies")),
     "Science et génie des matériaux": (
         "MX",
-        (
-            "Materials Science and Engineering",
-            "Chemistry and Chemical Engineering",
-            "Energy",
-        ),
+        ("Materials Science and Engineering", "Chemistry and Chemical Engineering", "Energy"),
     ),
     "Ingénierie des sciences du vivant": (
         "SV",
@@ -91,17 +75,10 @@ _BACHELOR_TO_MINORS: dict[str, tuple[str, tuple[str, str, str]]] = {
             "Materials Science and Engineering",
         ),
     ),
-    "Génie civil": (
-        "GC",
-        ("Civil Engineering", "Sustainable Construction", "Energy"),
-    ),
+    "Génie civil": ("GC", ("Civil Engineering", "Sustainable Construction", "Energy")),
     "Sciences et ingénierie de l'environnement": (
         "SIE",
-        (
-            "Environmental Sciences and Engineering",
-            "Engineering for Sustainability",
-            "Energy",
-        ),
+        ("Environmental Sciences and Engineering", "Engineering for Sustainability", "Energy"),
     ),
     "Architecture": (
         "AR",
@@ -113,11 +90,7 @@ _BACHELOR_TO_MINORS: dict[str, tuple[str, tuple[str, str, str]]] = {
     ),
     "Sciences humaines et sociales": (
         "SHS",
-        (
-            "Digital Humanities, Media and Society",
-            "Systems Engineering",
-            "Financial Engineering",
-        ),
+        ("Digital Humanities, Media and Society", "Systems Engineering", "Financial Engineering"),
     ),
 }
 
@@ -129,14 +102,8 @@ class CandidatePreview(NamedTuple):
     minors: tuple[str, str, str] | None
 
 
-_DOMAIN_RE = re.compile(
-    r"Domaine principal d'études\s*\n([^\n]+)",
-    re.IGNORECASE,
-)
-_EPFL_RE = re.compile(
-    r"Ecole polytechnique f[ée]d[ée]rale de Lausanne EPFL",
-    re.IGNORECASE,
-)
+_DOMAIN_RE = re.compile(r"Domaine principal d'études\s*\n([^\n]+)", re.IGNORECASE)
+_EPFL_RE = re.compile(r"Ecole polytechnique f[ée]d[ée]rale de Lausanne EPFL", re.IGNORECASE)
 
 
 def _find_synthese(candidate_dir: Path) -> Path | None:

@@ -41,9 +41,7 @@ class TestMappingTable:
         known = {m.name for m in ALL_MINORS}
         for bachelor, (_section, minors) in EPFL_BACHELOR_TO_MINORS.items():
             for name in minors:
-                assert name in known, (
-                    f"Mapping for {bachelor!r} references unknown minor {name!r}"
-                )
+                assert name in known, f"Mapping for {bachelor!r} references unknown minor {name!r}"
 
     def test_no_recommendation_includes_mte_master_minor(self) -> None:
         # MTE candidates already get the minor advisor's exclusion check;
@@ -73,8 +71,7 @@ class TestDetectEpflBachelor:
 
     def test_returns_none_without_epfl_marker(self) -> None:
         text = (
-            "Nom de l'institution\nUniversité de Genève\n"
-            "Domaine principal d'études\nInformatique\n"
+            "Nom de l'institution\nUniversité de Genève\nDomaine principal d'études\nInformatique\n"
         )
         assert detect_epfl_bachelor(text) is None
 
@@ -230,9 +227,7 @@ class TestRecommendMinorShortCircuit:
 
         monkeypatch.setattr(minor_advisor, "complete", _fake_complete)
         # Block the curriculum-match attempt so we don't hit the network.
-        monkeypatch.setattr(
-            minor_advisor, "_try_curriculum_match", _make_async_none()
-        )
+        monkeypatch.setattr(minor_advisor, "_try_curriculum_match", _make_async_none())
 
         result = await minor_advisor.recommend_minor(
             transcript_text="(transcript)",
@@ -273,9 +268,7 @@ class TestRecommendMinorShortCircuit:
             )
 
         monkeypatch.setattr(minor_advisor, "complete", _fake_complete)
-        monkeypatch.setattr(
-            minor_advisor, "_try_curriculum_match", _make_async_none()
-        )
+        monkeypatch.setattr(minor_advisor, "_try_curriculum_match", _make_async_none())
 
         # Even though full_dossier_text contains EPFL markers, the
         # candidate is flagged external — the deterministic path must
@@ -296,5 +289,3 @@ class TestRecommendMinorShortCircuit:
 
         assert called, "LLM should run for external candidates regardless of dossier text"
         assert result.primary_minor == "Financial Engineering"
-
-

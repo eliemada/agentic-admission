@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 from loguru import logger
 from pydantic import BaseModel, ValidationError
 from tenacity import RetryError, retry, retry_if_exception, stop_after_attempt, wait_exponential
+
+from agentic_admission.config import settings
+
+_HTTP_PAYMENT_REQUIRED: int = 402
+_BILLING_ERROR_MESSAGE: str = (
+    "OpenRouter credits exhausted. Add more at https://openrouter.ai/settings/credits"
+)
+_MAX_LLM_ATTEMPTS: int = 3
 
 
 class LLMError(Exception):
@@ -121,7 +129,7 @@ def _extract_json(text: str) -> dict | None:
     # Strategy 2: strip markdown fences
     if cleaned.startswith("```"):
         first_newline = cleaned.index("\n") if "\n" in cleaned else len(cleaned)
-        inner = cleaned[first_newline + 1:]
+        inner = cleaned[first_newline + 1 :]
         if inner.rstrip().endswith("```"):
             inner = inner.rstrip()[:-3].rstrip()
         try:
@@ -192,91 +200,38 @@ async def complete[T: BaseModel](
     LLMResponseError
         When the response cannot be parsed as JSON or fails Pydantic validation.
     """
-    from agentic_admission.config import settings
-
-    schema = response_model.model_json_schema()
-    schema_json = json.dumps(schema, indent=2)
-
-    # Strong JSON-only instruction appended to system message
-    schema_instruction = (
-        "\n\n# CRITICAL OUTPUT FORMAT REQUIREMENT\n"
-        "You MUST respond with ONLY a valid JSON object. "
-        "No thinking, no explanation, no markdown fences, no text before or after. "
-        "Your entire response must be parseable by json.loads().\n\n"
-        f"Required JSON schema:\n{schema_json}"
+    payload = _build_payload(
+        messages=messages,
+        response_model=response_model,
+        model=model,
+        base_url=base_url,
+        temperature=temperature,
+        max_tokens=max_tokens,
     )
-    formatted_messages = []
-    for m in messages:
-        if m.role == "system":
-            formatted_messages.append({"role": "system", "content": m.content + schema_instruction})
-        else:
-            formatted_messages.append(m.model_dump())
 
-    payload: dict = {
-        "model": model,
-        "messages": formatted_messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
+    for attempt in range(1, _MAX_LLM_ATTEMPTS + 1):
+        logger.debug(
+            "LLM request to {}: model={} (attempt {}/{})",
+            base_url,
+            model,
+            attempt,
+            _MAX_LLM_ATTEMPTS,
+        )
 
-    if "openrouter" in base_url and settings.openrouter_provider:
-        payload["provider"] = {"order": [settings.openrouter_provider]}
-
-    _max_llm_attempts = 3
-
-    for attempt in range(1, _max_llm_attempts + 1):
-        logger.debug("LLM request to {}: model={} (attempt {}/{})", base_url, model, attempt, _max_llm_attempts)
-
-        try:
-            response = await _post_with_retry(base_url=base_url, payload=payload, client=client)
-        except RetryError as exc:
-            cause = exc.last_attempt.exception()
-            msg = f"LLM request failed after retries: {cause}"
-            raise LLMConnectionError(msg) from cause
-        except httpx.HTTPStatusError as exc:
-            try:
-                error_body = exc.response.text[:500]
-            except Exception:
-                error_body = "(unreadable)"
-            logger.warning("LLM HTTP {}: {}", exc.response.status_code, error_body)
-            if exc.response.status_code == 402:
-                raise LLMBillingError(
-                    "OpenRouter credits exhausted. Add more at https://openrouter.ai/settings/credits"
-                ) from exc
-            msg = f"LLM request failed: {exc}"
-            raise LLMConnectionError(msg) from exc
-        except (httpx.ConnectError, httpx.ReadTimeout) as exc:
-            msg = f"LLM request failed: {exc}"
-            raise LLMConnectionError(msg) from exc
-
-        body = response.json()
-
-        # OpenRouter sometimes returns HTTP 200 with an error body
-        if "error" in body:
-            err = body["error"]
-            err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
-            msg = f"LLM returned error in response body: {err_msg}"
-            raise LLMResponseError(msg)
-
-        try:
-            raw_content = body["choices"][0]["message"]["content"]
-        except (KeyError, IndexError) as exc:
-            msg = f"LLM response missing expected structure: {str(body)[:200]}"
-            raise LLMResponseError(msg) from exc
-
-        if not raw_content:
-            if attempt < _max_llm_attempts:
-                logger.warning("LLM returned empty content (attempt {}/{}), retrying ...", attempt, _max_llm_attempts)
-                continue
-            msg = f"LLM returned empty content after {_max_llm_attempts} attempts: {str(body)[:200]}"
-            raise LLMResponseError(msg)
+        body = await _send_request(base_url=base_url, payload=payload, client=client)
+        raw_content = _extract_raw_content(body, attempt=attempt)
+        if raw_content is None:
+            continue  # empty content, retry
 
         logger.debug("LLM raw response: {}", raw_content[:500])
-
         parsed = _extract_json(raw_content)
         if parsed is None:
-            if attempt < _max_llm_attempts:
-                logger.warning("LLM returned unparseable JSON (attempt {}/{}), retrying ...", attempt, _max_llm_attempts)
+            if attempt < _MAX_LLM_ATTEMPTS:
+                logger.warning(
+                    "LLM returned unparseable JSON (attempt {}/{}), retrying ...",
+                    attempt,
+                    _MAX_LLM_ATTEMPTS,
+                )
                 continue
             msg = f"LLM returned unparseable JSON: {raw_content[:200]}"
             raise LLMResponseError(msg)
@@ -284,11 +239,114 @@ async def complete[T: BaseModel](
         try:
             return response_model.model_validate(parsed)
         except ValidationError as exc:
-            if attempt < _max_llm_attempts:
-                logger.warning("LLM response failed validation (attempt {}/{}), retrying ...", attempt, _max_llm_attempts)
+            if attempt < _MAX_LLM_ATTEMPTS:
+                logger.warning(
+                    "LLM response failed validation (attempt {}/{}), retrying ...",
+                    attempt,
+                    _MAX_LLM_ATTEMPTS,
+                )
                 continue
             msg = f"LLM response failed {response_model.__name__} validation"
             raise LLMResponseError(msg) from exc
 
     msg = "LLM request failed: exhausted all attempts"
+    raise LLMResponseError(msg)
+
+
+def _build_payload(
+    *,
+    messages: list[ChatMessage],
+    response_model: type[BaseModel],
+    model: str,
+    base_url: str,
+    temperature: float,
+    max_tokens: int,
+) -> dict[str, Any]:
+    """Build the OpenAI-style chat completion payload with JSON-schema injection."""
+    schema_json = json.dumps(response_model.model_json_schema(), indent=2)
+    schema_instruction = (
+        "\n\n# CRITICAL OUTPUT FORMAT REQUIREMENT\n"
+        "You MUST respond with ONLY a valid JSON object. "
+        "No thinking, no explanation, no markdown fences, no text before or after. "
+        "Your entire response must be parseable by json.loads().\n\n"
+        f"Required JSON schema:\n{schema_json}"
+    )
+    formatted_messages = [
+        {
+            "role": m.role,
+            "content": m.content + schema_instruction if m.role == "system" else m.content,
+        }
+        for m in messages
+    ]
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": formatted_messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if "openrouter" in base_url and settings.openrouter_provider:
+        payload["provider"] = {"order": [settings.openrouter_provider]}
+    return payload
+
+
+async def _send_request(
+    *, base_url: str, payload: dict[str, Any], client: httpx.AsyncClient | None
+) -> dict[str, Any]:
+    """Dispatch a single LLM request and translate transport errors."""
+    try:
+        response = await _post_with_retry(base_url=base_url, payload=payload, client=client)
+    except RetryError as exc:
+        cause = exc.last_attempt.exception()
+        msg = f"LLM request failed after retries: {cause}"
+        raise LLMConnectionError(msg) from cause
+    except httpx.HTTPStatusError as exc:
+        _handle_http_error(exc)
+    except (httpx.ConnectError, httpx.ReadTimeout) as exc:
+        msg = f"LLM request failed: {exc}"
+        raise LLMConnectionError(msg) from exc
+
+    body = response.json()
+    if "error" in body:
+        err = body["error"]
+        err_msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+        msg = f"LLM returned error in response body: {err_msg}"
+        raise LLMResponseError(msg)
+    return body
+
+
+def _handle_http_error(exc: httpx.HTTPStatusError) -> None:
+    """Map an HTTPStatusError to the right ``LLMError`` subclass."""
+    try:
+        error_body = exc.response.text[:500]
+    except Exception:
+        error_body = "(unreadable)"
+    logger.warning("LLM HTTP {}: {}", exc.response.status_code, error_body)
+    if exc.response.status_code == _HTTP_PAYMENT_REQUIRED:
+        raise LLMBillingError(_BILLING_ERROR_MESSAGE) from exc
+    msg = f"LLM request failed: {exc}"
+    raise LLMConnectionError(msg) from exc
+
+
+def _extract_raw_content(body: dict[str, Any], *, attempt: int) -> str | None:
+    """Pull ``choices[0].message.content`` from the LLM response body.
+
+    Returns ``None`` when the content is empty and a retry is still
+    available; raises ``LLMResponseError`` on terminal failure or malformed
+    structure.
+    """
+    try:
+        raw_content = body["choices"][0]["message"]["content"]
+    except (KeyError, IndexError) as exc:
+        msg = f"LLM response missing expected structure: {str(body)[:200]}"
+        raise LLMResponseError(msg) from exc
+
+    if raw_content:
+        return raw_content
+    if attempt < _MAX_LLM_ATTEMPTS:
+        logger.warning(
+            "LLM returned empty content (attempt {}/{}), retrying ...", attempt, _MAX_LLM_ATTEMPTS
+        )
+        return None
+    msg = f"LLM returned empty content after {_MAX_LLM_ATTEMPTS} attempts: {str(body)[:200]}"
     raise LLMResponseError(msg)

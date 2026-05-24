@@ -35,10 +35,7 @@ def _sample_curriculum() -> Curriculum:
         url="https://x",
     )
     p_ds = Program(
-        slug="data-science-minor",
-        name="Data Science",
-        level=ProgramLevel.MINOR,
-        url="https://y",
+        slug="data-science-minor", name="Data Science", level=ProgramLevel.MINOR, url="https://y"
     )
     c1 = Course(code="CS-250", name="Algorithms", credits=6)
     c2 = Course(code="MATH-101", name="Analysis I", credits=8)
@@ -57,7 +54,9 @@ def _sample_report() -> CurriculumMatchReport:
         candidate_id="test-001",
         course_matches=(
             CourseMatch(candidate_course="Algorithmen", epfl_codes=("CS-250",), confidence=0.9),
-            CourseMatch(candidate_course="Lineare Algebra", epfl_codes=("MATH-111",), confidence=0.85),
+            CourseMatch(
+                candidate_course="Lineare Algebra", epfl_codes=("MATH-111",), confidence=0.85
+            ),
         ),
         coverage_by_area=(
             CoverageArea(area="CS Core", coverage=0.7, gap_courses=("CS-206",)),
@@ -155,11 +154,9 @@ class TestToReport:
 
         response = _MatcherResponse(
             course_matches=[
-                _MatchedCourse(candidate_course="Algo", epfl_codes=["CS-250"], confidence=0.9),
+                _MatchedCourse(candidate_course="Algo", epfl_codes=["CS-250"], confidence=0.9)
             ],
-            coverage_areas=[
-                _CoverageAreaResponse(area="CS", coverage=0.7, gap_courses=[]),
-            ],
+            coverage_areas=[_CoverageAreaResponse(area="CS", coverage=0.7, gap_courses=[])],
             overall_coverage=0.7,
             closest_epfl_bachelor="Computer Science",
             minor_fits=[
@@ -171,7 +168,7 @@ class TestToReport:
                     strengths=["algorithms"],
                     gaps=["probability"],
                     reasoning="Good fit.",
-                ),
+                )
             ],
             summary="Strong candidate.",
         )

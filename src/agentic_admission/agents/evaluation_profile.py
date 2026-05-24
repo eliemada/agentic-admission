@@ -30,14 +30,13 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+# Allowed absolute deviation from 1.0 when validating profile weights.
 _WEIGHT_TOLERANCE: float = 1e-6
-"""Allowed absolute deviation from 1.0 when validating profile weights."""
 
-_REFERENCE_DIMENSIONS: frozenset[str] = frozenset(
-    {"reference_quality", "calibration_confidence"}
-)
-"""Dimensions produced by the Reference Letter Specialist."""
+# Dimensions produced by the Reference Letter Specialist.
+_REFERENCE_DIMENSIONS: frozenset[str] = frozenset({"reference_quality", "calibration_confidence"})
 
+# Canonical ordering of the 8 scoring dimensions.
 ALL_DIMENSIONS: tuple[str, ...] = (
     "academic_strength",
     "institution_quality",
@@ -48,7 +47,6 @@ ALL_DIMENSIONS: tuple[str, ...] = (
     "risk_flags",
     "consistency",
 )
-"""Canonical ordering of the 8 scoring dimensions."""
 
 
 @dataclass(frozen=True)
@@ -109,6 +107,12 @@ class EvaluationProfile:
                 raise ValueError(msg)
 
 
+# Default profile for non-EPFL candidates.
+#
+# Re-balances the previous (broken) weights from 0.85 to 1.0 while
+# preserving relative ordering: academic + institution lead (48%),
+# reference + calibration follow (30%), motivation + fit are minor
+# tiebreakers (12%), devil's-advocate dimensions are sanity checks (10%).
 EXTERNAL_PROFILE: EvaluationProfile = EvaluationProfile(
     name="external",
     weights={
@@ -123,15 +127,24 @@ EXTERNAL_PROFILE: EvaluationProfile = EvaluationProfile(
     },
     skip_reference=False,
 )
-"""Default profile for non-EPFL candidates.
-
-Re-balances the previous (broken) weights from 0.85 to 1.0 while
-preserving relative ordering: academic + institution lead (48%),
-reference + calibration follow (30%), motivation + fit are minor
-tiebreakers (12%), devil's-advocate dimensions are sanity checks (10%).
-"""
 
 
+# Profile for EPFL bachelors transferring into MTE.
+#
+# Rationale, derived from the 2026-05-08 admission committee meeting:
+#
+# * Most internal candidates submit no recommendation letters
+#   (4 of 5 sampled dossiers). Forcing the reference evaluator on these
+#   candidates returns ``reference_quality=1-2`` and tanks the composite
+#   by ~25%.
+# * The committee's actual rule for internals is the algebra + analysis
+#   average against the 3-band rule (Geraldine 2026-05-12): >=4.5 accept,
+#   4.0-4.5 discuss, <4.0 reject. ``academic_strength`` therefore carries
+#   most of the weight.
+# * Institution quality is fixed (always EPFL) so it carries less signal --
+#   weight reduced from 18% to 10%.
+# * Motivation and program fit are the two remaining differentiators for
+#   internal candidates, so they are up-weighted (5% -> 15% each).
 EPFL_INTERNAL_PROFILE: EvaluationProfile = EvaluationProfile(
     name="epfl_internal",
     weights={
@@ -146,22 +159,6 @@ EPFL_INTERNAL_PROFILE: EvaluationProfile = EvaluationProfile(
     },
     skip_reference=True,
 )
-"""Profile for EPFL bachelors transferring into MTE.
-
-Rationale, derived from the 2026-05-08 admission committee meeting:
-
-* Most internal candidates submit no recommendation letters
-  (4 of 5 sampled dossiers). Forcing the reference evaluator on these
-  candidates returns ``reference_quality=1-2`` and tanks the composite
-  by ~25%.
-* The committee's actual rule for internals is the algebra + analysis
-  average against a 4.5 (default) or 4.0 (section-switcher) threshold.
-  ``academic_strength`` should therefore carry most of the weight.
-* Institution quality is fixed (always EPFL) so it carries less signal —
-  weight reduced from 18% to 10%.
-* Motivation and program fit are the two remaining differentiators
-  for internal candidates, so they are up-weighted (5% → 15% each).
-"""
 
 
 def select_profile(*, is_epfl_internal: bool) -> EvaluationProfile:
@@ -206,15 +203,10 @@ def renormalize_without_reference(profile: EvaluationProfile) -> EvaluationProfi
     if profile.skip_reference:
         return profile
 
-    remaining = {
-        dim: w for dim, w in profile.weights.items() if dim not in _REFERENCE_DIMENSIONS
-    }
+    remaining = {dim: w for dim, w in profile.weights.items() if dim not in _REFERENCE_DIMENSIONS}
     remaining_total = sum(remaining.values())
     if remaining_total <= 0.0:
-        msg = (
-            f"Cannot renormalize {profile.name!r}: non-reference weights "
-            f"sum to {remaining_total}"
-        )
+        msg = f"Cannot renormalize {profile.name!r}: non-reference weights sum to {remaining_total}"
         raise ValueError(msg)
 
     scale = 1.0 / remaining_total
@@ -222,7 +214,5 @@ def renormalize_without_reference(profile: EvaluationProfile) -> EvaluationProfi
     new_weights.update({dim: w * scale for dim, w in remaining.items()})
 
     return EvaluationProfile(
-        name=f"{profile.name}_no_reference",
-        weights=new_weights,
-        skip_reference=True,
+        name=f"{profile.name}_no_reference", weights=new_weights, skip_reference=True
     )

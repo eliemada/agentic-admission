@@ -51,22 +51,13 @@ _RECOMMENDATION_REASON: str = (
 # legacy bachelor names route to the LLM fallback rather than silently
 # pick a wrong section.
 _EPFL_BACHELOR_TO_MINORS_RAW: dict[str, tuple[str, tuple[str, str, str]]] = {
-    "Informatique": (
-        "IN",
-        ("Computer Science", "Cyber Security", "Data Science"),
-    ),
+    "Informatique": ("IN", ("Computer Science", "Cyber Security", "Data Science")),
     "Systèmes de communication": (
         "SC",
         ("Data Science", "Cyber Security", "Communication Systems"),
     ),
-    "Mathématiques": (
-        "MA",
-        ("Mathematics", "Statistics", "Computational Science and Engineering"),
-    ),
-    "Physique": (
-        "PH",
-        ("Physics", "Quantum Science and Engineering", "Photonics"),
-    ),
+    "Mathématiques": ("MA", ("Mathematics", "Statistics", "Computational Science and Engineering")),
+    "Physique": ("PH", ("Physics", "Quantum Science and Engineering", "Photonics")),
     "Génie électrique et électronique": (
         "EL",
         (
@@ -79,17 +70,10 @@ _EPFL_BACHELOR_TO_MINORS_RAW: dict[str, tuple[str, tuple[str, str, str]]] = {
         "GM",
         ("Mechanical Engineering", "Energy", "Materials Science and Engineering"),
     ),
-    "Microtechnique": (
-        "MT",
-        ("Microengineering", "Photonics", "Biomedical Technologies"),
-    ),
+    "Microtechnique": ("MT", ("Microengineering", "Photonics", "Biomedical Technologies")),
     "Science et génie des matériaux": (
         "MX",
-        (
-            "Materials Science and Engineering",
-            "Chemistry and Chemical Engineering",
-            "Energy",
-        ),
+        ("Materials Science and Engineering", "Chemistry and Chemical Engineering", "Energy"),
     ),
     "Ingénierie des sciences du vivant": (
         "SV",
@@ -119,17 +103,10 @@ _EPFL_BACHELOR_TO_MINORS_RAW: dict[str, tuple[str, tuple[str, str, str]]] = {
             "Materials Science and Engineering",
         ),
     ),
-    "Génie civil": (
-        "GC",
-        ("Civil Engineering", "Sustainable Construction", "Energy"),
-    ),
+    "Génie civil": ("GC", ("Civil Engineering", "Sustainable Construction", "Energy")),
     "Sciences et ingénierie de l'environnement": (
         "SIE",
-        (
-            "Environmental Sciences and Engineering",
-            "Engineering for Sustainability",
-            "Energy",
-        ),
+        ("Environmental Sciences and Engineering", "Engineering for Sustainability", "Energy"),
     ),
     "Architecture": (
         "AR",
@@ -141,11 +118,7 @@ _EPFL_BACHELOR_TO_MINORS_RAW: dict[str, tuple[str, tuple[str, str, str]]] = {
     ),
     "Sciences humaines et sociales": (
         "SHS",
-        (
-            "Digital Humanities, Media and Society",
-            "Systems Engineering",
-            "Financial Engineering",
-        ),
+        ("Digital Humanities, Media and Society", "Systems Engineering", "Financial Engineering"),
     ),
 }
 
@@ -171,28 +144,25 @@ def _validate_table_against_registry() -> None:
 
 _validate_table_against_registry()
 
+# Read-only mapping: EPFL bachelor name -> (section, top-3 minors).
+#
+# Exposed via ``MappingProxyType`` so callers cannot mutate the table at
+# runtime. Order of the minor tuple is the recommendation order (best
+# fit first).
 EPFL_BACHELOR_TO_MINORS: Mapping[str, tuple[str, tuple[str, str, str]]] = MappingProxyType(
     _EPFL_BACHELOR_TO_MINORS_RAW
 )
-"""Read-only mapping: EPFL bachelor name → (section, top-3 minors).
-
-The mapping is exposed via ``MappingProxyType`` so callers cannot mutate
-the table at runtime. Order of the minor tuple is the recommendation
-order (best fit first).
-"""
 
 
 # Anchored on the labelled form field rather than free-text bachelor names
 # to avoid false positives in motivation letters / CV ("...interested in
 # microengineering...").
 _DOMAIN_RE: re.Pattern[str] = re.compile(
-    r"Domaine principal d'[ée]tudes\s*\n\s*([^\n]+)",
-    re.IGNORECASE,
+    r"Domaine principal d'[ée]tudes\s*\n\s*([^\n]+)", re.IGNORECASE
 )
 
 _EPFL_MARKER_RE: re.Pattern[str] = re.compile(
-    r"Ecole polytechnique f[ée]d[ée]rale de Lausanne EPFL",
-    re.IGNORECASE,
+    r"Ecole polytechnique f[ée]d[ée]rale de Lausanne EPFL", re.IGNORECASE
 )
 
 
@@ -285,7 +255,4 @@ def build_deterministic_recommendation(bachelor_fr: str) -> MinorRecommendation:
     # MinorRecommendation but kept here to make logging callers aware.
     _ = section
 
-    return MinorRecommendation(
-        recommended=tuple(scored),
-        primary_minor=scored[0].minor_name,
-    )
+    return MinorRecommendation(recommended=tuple(scored), primary_minor=scored[0].minor_name)

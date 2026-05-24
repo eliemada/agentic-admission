@@ -111,28 +111,28 @@ def _print_single_result(dossier: object, verdict: PanelVerdict, gpa: object) ->
     if verdict.minor_recommendation is not None:
         minor_str = f" | minor: {verdict.minor_recommendation.primary_minor}"
 
-    print()  # noqa: T201
-    print(f"  {dossier.candidate_id}")  # noqa: T201
-    print(f"    School:    {dossier.school_name} ({dossier.school_country})")  # noqa: T201
-    print(f"    GPA:       {gpa.gpa_value}/{gpa.gpa_scale} (norm: {gpa.gpa_normalized:.0f}/100)")  # noqa: T201
-    print(f"    Agent:     {verdict.decision.value} (composite: {verdict.composite_score:.1f})")  # noqa: T201
-    print(f"    Committee: {committee}")  # noqa: T201
-    print(f"    Result:    {match}{minor_str}")  # noqa: T201
+    print()
+    print(f"  {dossier.candidate_id}")
+    print(f"    School:    {dossier.school_name} ({dossier.school_country})")
+    print(f"    GPA:       {gpa.gpa_value}/{gpa.gpa_scale} (norm: {gpa.gpa_normalized:.0f}/100)")
+    print(f"    Agent:     {verdict.decision.value} (composite: {verdict.composite_score:.1f})")
+    print(f"    Committee: {committee}")
+    print(f"    Result:    {match}{minor_str}")
 
     # Print pros/cons
     justification = verdict.justification
     if hasattr(justification, "pros"):
         if justification.pros:
-            print("    Pros:")  # noqa: T201
+            print("    Pros:")
             for pro in justification.pros:
-                print(f"      + {pro}")  # noqa: T201
+                print(f"      + {pro}")
         if justification.cons:
-            print("    Cons:")  # noqa: T201
+            print("    Cons:")
             for con in justification.cons:
-                print(f"      - {con}")  # noqa: T201
+                print(f"      - {con}")
     else:
-        print(f"    Summary:   {justification}")  # noqa: T201
-    print()  # noqa: T201
+        print(f"    Summary:   {justification}")
+    print()
 
 
 def main() -> None:
@@ -161,17 +161,17 @@ def main() -> None:
     output_dir = args.output_dir or Path(settings.evaluation_output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print("=" * 60)  # noqa: T201
-    print("  MTE Admission Demo Evaluation")  # noqa: T201
-    print(f"  Model:    {model}")  # noqa: T201
-    print(f"  Endpoint: {base_url}")  # noqa: T201
-    print(f"  Output:   {output_dir}")  # noqa: T201
-    print("=" * 60)  # noqa: T201
-    print()  # noqa: T201
-    print("  Candidates:")  # noqa: T201
+    print("=" * 60)
+    print("  MTE Admission Demo Evaluation")
+    print(f"  Model:    {model}")
+    print(f"  Endpoint: {base_url}")
+    print(f"  Output:   {output_dir}")
+    print("=" * 60)
+    print()
+    print("  Candidates:")
     for cid, expected in _DEMO_CANDIDATES.items():
-        print(f"    {cid} (expected: {expected})")  # noqa: T201
-    print()  # noqa: T201
+        print(f"    {cid} (expected: {expected})")
+    print()
 
     asyncio.run(
         _run_demo(

@@ -194,11 +194,9 @@ ALL_MINORS: tuple[Minor, ...] = (
         contact="Hazboun E.",
     ),
 )
-"""Complete registry of 36 EPFL minors for 2025-26.
-
-Note: 'Territories in Transformation and Climate (TTC)' is excluded as it is
-no longer offered from September 2025.
-"""
+# Complete registry of 36 EPFL minors for 2025-26.
+# 'Territories in Transformation and Climate (TTC)' is excluded as it is
+# no longer offered from September 2025.
 
 _SECTION_CODES: frozenset[str] = frozenset(m.section_code for m in ALL_MINORS)
 
@@ -232,13 +230,12 @@ def get_minor_by_name(name: str) -> Minor | None:
     return None
 
 
+# Name of the minor that mirrors the MTE master program itself.
+#
+# A candidate admitted to the MTE master cannot take this minor -- it is
+# the master's own curriculum re-packaged as a minor for OTHER programs'
+# students. The minor advisor must filter it out.
 _MTE_MASTER_MINOR_NAME: str = "Management, Technology and Entrepreneurship"
-"""Name of the minor that mirrors the MTE master program itself.
-
-A candidate admitted to the MTE master cannot take this minor — it is
-the master's own curriculum re-packaged as a minor for OTHER programs'
-students. The minor advisor must filter it out.
-"""
 
 
 def is_mte_master_minor(minor_name: str) -> bool:

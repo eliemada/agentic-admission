@@ -83,8 +83,7 @@ def _response_to_scorecard(role: AgentRole, response: BaseModel) -> AgentScoreca
             dim = key.removesuffix("_justification")
             if isinstance(value, dict):
                 justifications[dim] = DimensionJustification(
-                    pros=tuple(value.get("pros", ())),
-                    cons=tuple(value.get("cons", ())),
+                    pros=tuple(value.get("pros", ())), cons=tuple(value.get("cons", ()))
                 )
             else:
                 justifications[dim] = _parse_justification(str(value))
@@ -106,8 +105,7 @@ def _parse_justification(raw: str) -> DimensionJustification:
             parsed = json.loads(raw)
             if isinstance(parsed, dict) and ("pros" in parsed or "cons" in parsed):
                 return DimensionJustification(
-                    pros=tuple(parsed.get("pros", ())),
-                    cons=tuple(parsed.get("cons", ())),
+                    pros=tuple(parsed.get("pros", ())), cons=tuple(parsed.get("cons", ()))
                 )
         except json.JSONDecodeError:
             pass
@@ -243,8 +241,31 @@ async def evaluate_motivation(
     return _response_to_scorecard(AgentRole.MOTIVATION, response)
 
 
+_EPFL_INTERNAL_DEVILS_CONTEXT: str = (
+    "\n\n## EPFL-internal candidate context\n"
+    "This candidate is an EPFL bachelor transferring to MTE. Per committee "
+    "policy, EPFL-internal candidates are NOT required to submit reference "
+    "letters — their absence is expected and procedural, not a red flag.\n\n"
+    "RULES:\n"
+    "- Do NOT flag missing reference letters in `risk_flags`.\n"
+    "- Do NOT flag the absence of letters as an inconsistency in `consistency`.\n"
+    "- Do NOT count 'no contact details for referees' or 'only names listed' "
+    "as risks.\n"
+    "- Focus risk analysis on the transcript, CV, and motivation letter only.\n"
+    "- Section-switcher signals (e.g. weak grades in advanced section-specific "
+    "courses while strong in transferable subjects) are EXPECTED for an MTE "
+    "applicant leaving their original section. Do not flag these as risks "
+    "either.\n"
+)
+
+
 async def evaluate_devils_advocate(
-    *, full_dossier_text: str, model: str, base_url: str, client: httpx.AsyncClient | None = None
+    *,
+    full_dossier_text: str,
+    model: str,
+    base_url: str,
+    client: httpx.AsyncClient | None = None,
+    is_epfl_internal: bool = False,
 ) -> AgentScorecard:
     """Run the Devil's Advocate agent.
 
@@ -258,14 +279,21 @@ async def evaluate_devils_advocate(
         vLLM endpoint base URL.
     client
         Optional shared ``httpx.AsyncClient``.
+    is_epfl_internal
+        When ``True``, prepend a context block telling the agent not to
+        penalise missing reference letters or section-specific weak grades
+        (both are expected for an EPFL-internal MTE applicant).
 
     Returns
     -------
     AgentScorecard
         Scorecard with ``risk_flags`` and ``consistency``.
     """
+    system_prompt = AGENT_PROMPTS[AgentRole.DEVILS_ADVOCATE]
+    if is_epfl_internal:
+        system_prompt = system_prompt + _EPFL_INTERNAL_DEVILS_CONTEXT
     messages = [
-        ChatMessage(role="system", content=AGENT_PROMPTS[AgentRole.DEVILS_ADVOCATE]),
+        ChatMessage(role="system", content=system_prompt),
         ChatMessage(role="user", content=f"Review this complete dossier:\n\n{full_dossier_text}"),
     ]
     response = await complete(
