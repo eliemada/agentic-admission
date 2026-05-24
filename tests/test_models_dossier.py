@@ -7,6 +7,7 @@ from pathlib import PurePosixPath
 from agentic_admission.models.document import DocumentType, DossierDocument, classify_document
 from agentic_admission.models.dossier import Dossier, ProcessingStage
 from agentic_admission.models.evaluation import AgentRole, AgentScorecard, Decision, PanelVerdict
+from tests.conftest import make_justification, make_verdict_summary
 
 # ---------------------------------------------------------------------------
 # DocumentType classification
@@ -157,7 +158,10 @@ class TestAgentEvaluation:
         card = AgentScorecard(
             role=AgentRole.ACADEMIC,
             scores={"academic_strength": 8, "institution_quality": 7},
-            justifications={"academic_strength": "Strong GPA from top-tier school."},
+            justifications={
+                "academic_strength": make_justification(pros=("Strong GPA from top-tier school.",)),
+                "institution_quality": make_justification(pros=("Priority tier.",)),
+            },
         )
         assert card.role == AgentRole.ACADEMIC
         assert card.scores["academic_strength"] == 8
@@ -167,12 +171,14 @@ class TestAgentEvaluation:
             AgentScorecard(
                 role=AgentRole.ACADEMIC,
                 scores={"academic_strength": 3},
-                justifications={"academic_strength": "Weak GPA."},
+                justifications={"academic_strength": make_justification(cons=("Weak GPA.",))},
             ),
             AgentScorecard(
                 role=AgentRole.MOTIVATION,
                 scores={"motivation_clarity": 8},
-                justifications={"motivation_clarity": "Strong motivation letter."},
+                justifications={
+                    "motivation_clarity": make_justification(pros=("Strong motivation letter.",))
+                },
             ),
         )
         verdict = PanelVerdict(
@@ -182,7 +188,9 @@ class TestAgentEvaluation:
             final_scores={"academic_strength": 3, "motivation_clarity": 8},
             composite_score=5.5,
             decision=Decision.WAITLIST,
-            justification="The panel is split. Recommending waitlist for further review.",
+            justification=make_verdict_summary(
+                pros=("Strong motivation",), cons=("Panel split, sending to committee.",)
+            ),
         )
         assert verdict.decision == Decision.WAITLIST
         assert len(verdict.scorecards) == 2

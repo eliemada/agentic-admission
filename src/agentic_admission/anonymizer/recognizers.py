@@ -72,13 +72,7 @@ class SciperRecognizer(PatternRecognizer):
 # Passport recognizer
 # ---------------------------------------------------------------------------
 
-_PASSPORT_PATTERNS = [
-    Pattern(
-        name="passport_alpha",
-        regex=r"\b[A-Z]{1,2}\d{6,9}\b",
-        score=0.4,
-    ),
-]
+_PASSPORT_PATTERNS = [Pattern(name="passport_alpha", regex=r"\b[A-Z]{1,2}\d{6,9}\b", score=0.4)]
 
 _PASSPORT_CONTEXT = [
     "passport",

@@ -72,10 +72,7 @@ def _ensure_collection(client: ZeroEntropy, name: str, *, force: bool) -> None:
 
 
 def ingest_reference_letters(
-    anonymized_root: Path,
-    *,
-    collection_name: str | None = None,
-    force: bool = False,
+    anonymized_root: Path, *, collection_name: str | None = None, force: bool = False
 ) -> int:
     """Upload all anonymized recommendation letters to zsearch.
 
@@ -150,21 +147,12 @@ def main() -> None:
         help="Root of anonymized dossier tree",
     )
     parser.add_argument(
-        "--collection",
-        type=str,
-        default=None,
-        help="zsearch collection name (default: from .env)",
+        "--collection", type=str, default=None, help="zsearch collection name (default: from .env)"
     )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Delete and recreate the collection",
-    )
+    parser.add_argument("--force", action="store_true", help="Delete and recreate the collection")
     args = parser.parse_args()
 
-    count = ingest_reference_letters(
-        args.root, collection_name=args.collection, force=args.force
-    )
+    count = ingest_reference_letters(args.root, collection_name=args.collection, force=args.force)
     logger.info("Done. {} documents ingested.", count)
 
 

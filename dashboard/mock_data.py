@@ -40,12 +40,7 @@ MOCK_EVALUATIONS: list[dict] = [
                     "in algorithms, systems, and mathematics. No concerns about academic "
                     "preparation for the MTE program."
                 ),
-                "scores": {
-                    "academic": 9,
-                    "motivation": 8,
-                    "recommendation": 9,
-                    "experience": 7,
-                },
+                "scores": {"academic": 9, "motivation": 8, "recommendation": 9, "experience": 7},
                 "document_references": [
                     {
                         "doc_type": "transcript",
@@ -68,17 +63,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "that produced a working prototype. Cultural fit with MTE's "
                     "interdisciplinary philosophy is strong."
                 ),
-                "scores": {
-                    "academic": 9,
-                    "motivation": 9,
-                    "recommendation": 8,
-                    "experience": 7,
-                },
+                "scores": {"academic": 9, "motivation": 9, "recommendation": 8, "experience": 7},
                 "document_references": [
                     {
                         "doc_type": "motivation_letter",
                         "note": "Clear articulation of entrepreneurial vision in deep-tech/ML automation",
-                    },
+                    }
                 ],
             },
             {
@@ -91,17 +81,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "learning shows ability to work at the frontier. Technical skills "
                     "are well-suited for the MTE program's technology track."
                 ),
-                "scores": {
-                    "academic": 9,
-                    "motivation": 8,
-                    "recommendation": 9,
-                    "experience": 8,
-                },
+                "scores": {"academic": 9, "motivation": 8, "recommendation": 9, "experience": 8},
                 "document_references": [
                     {
                         "doc_type": "transcript",
                         "note": "Semester project on federated learning received highest mark",
-                    },
+                    }
                 ],
             },
         ],
@@ -155,12 +140,7 @@ MOCK_EVALUATIONS: list[dict] = [
                     "statistics, entrepreneurship. Published research demonstrates "
                     "academic maturity beyond typical applicants."
                 ),
-                "scores": {
-                    "academic": 10,
-                    "motivation": 9,
-                    "recommendation": 10,
-                    "experience": 8,
-                },
+                "scores": {"academic": 10, "motivation": 9, "recommendation": 10, "experience": 8},
                 "document_references": [
                     {
                         "doc_type": "transcript",
@@ -182,12 +162,7 @@ MOCK_EVALUATIONS: list[dict] = [
                     "letter shows mature understanding of the tech-business interface. "
                     "Would bring valuable Silicon Valley perspective to the cohort."
                 ),
-                "scores": {
-                    "academic": 10,
-                    "motivation": 9,
-                    "recommendation": 10,
-                    "experience": 9,
-                },
+                "scores": {"academic": 10, "motivation": 9, "recommendation": 10, "experience": 9},
                 "document_references": [
                     {
                         "doc_type": "motivation_letter",
@@ -209,17 +184,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "Technical depth is outstanding and directly aligned with the "
                     "program's technology component."
                 ),
-                "scores": {
-                    "academic": 10,
-                    "motivation": 8,
-                    "recommendation": 10,
-                    "experience": 9,
-                },
+                "scores": {"academic": 10, "motivation": 8, "recommendation": 10, "experience": 9},
                 "document_references": [
                     {
                         "doc_type": "recommendation_letter",
                         "note": "Details candidate's NeurIPS workshop paper on multi-agent RL",
-                    },
+                    }
                 ],
             },
         ],
@@ -274,17 +244,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "management electives are mediocre. Meets minimum requirements but "
                     "doesn't stand out academically."
                 ),
-                "scores": {
-                    "academic": 6,
-                    "motivation": 5,
-                    "recommendation": 6,
-                    "experience": 5,
-                },
+                "scores": {"academic": 6, "motivation": 5, "recommendation": 6, "experience": 5},
                 "document_references": [
                     {
                         "doc_type": "transcript",
                         "note": "Strong in engineering courses but weaker in management electives (2.7-3.0 range)",
-                    },
+                    }
                 ],
             },
             {
@@ -297,12 +262,7 @@ MOCK_EVALUATIONS: list[dict] = [
                     "and communication. Motivation letter is generic — could apply to any "
                     "program. Unclear why MTE specifically."
                 ),
-                "scores": {
-                    "academic": 6,
-                    "motivation": 4,
-                    "recommendation": 5,
-                    "experience": 5,
-                },
+                "scores": {"academic": 6, "motivation": 4, "recommendation": 5, "experience": 5},
                 "document_references": [
                     {
                         "doc_type": "recommendation_letter",
@@ -324,17 +284,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "Technical preparation is sufficient for the program, though not "
                     "outstanding."
                 ),
-                "scores": {
-                    "academic": 7,
-                    "motivation": 5,
-                    "recommendation": 6,
-                    "experience": 6,
-                },
+                "scores": {"academic": 7, "motivation": 5, "recommendation": 6, "experience": 6},
                 "document_references": [
                     {
                         "doc_type": "transcript",
                         "note": "Bachelor thesis on IoT sensor networks — practical systems work",
-                    },
+                    }
                 ],
             },
         ],
@@ -389,17 +344,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "mathematics, and economics. Two solid internships add practical "
                     "dimension to academic record."
                 ),
-                "scores": {
-                    "academic": 8,
-                    "motivation": 8,
-                    "recommendation": 8,
-                    "experience": 9,
-                },
+                "scores": {"academic": 8, "motivation": 8, "recommendation": 8, "experience": 9},
                 "document_references": [
                     {
                         "doc_type": "transcript",
                         "note": "Top quartile at IIT Bombay with strong breadth across CS, math, economics",
-                    },
+                    }
                 ],
             },
             {
@@ -412,12 +362,7 @@ MOCK_EVALUATIONS: list[dict] = [
                     "internship validates industry-readiness. Motivation letter shows "
                     "genuine interest in bringing technology solutions to emerging markets."
                 ),
-                "scores": {
-                    "academic": 8,
-                    "motivation": 9,
-                    "recommendation": 8,
-                    "experience": 9,
-                },
+                "scores": {"academic": 8, "motivation": 9, "recommendation": 8, "experience": 9},
                 "document_references": [
                     {
                         "doc_type": "motivation_letter",
@@ -438,17 +383,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "and coursework. Familiar with ML, cloud infrastructure, and agile "
                     "development. Technical skills are well-aligned with MTE requirements."
                 ),
-                "scores": {
-                    "academic": 8,
-                    "motivation": 8,
-                    "recommendation": 8,
-                    "experience": 9,
-                },
+                "scores": {"academic": 8, "motivation": 8, "recommendation": 8, "experience": 9},
                 "document_references": [
                     {
                         "doc_type": "recommendation_letter",
                         "note": "Google internship supervisor highlights strong engineering and initiative",
-                    },
+                    }
                 ],
             },
         ],
@@ -503,21 +443,13 @@ MOCK_EVALUATIONS: list[dict] = [
                     "committee should assess whether MTE adds meaningful value beyond "
                     "what the candidate already has."
                 ),
-                "scores": {
-                    "academic": 7,
-                    "motivation": 6,
-                    "recommendation": 7,
-                    "experience": 6,
-                },
+                "scores": {"academic": 7, "motivation": 6, "recommendation": 7, "experience": 6},
                 "document_references": [
                     {
                         "doc_type": "transcript",
                         "note": "Solid but unremarkable — 3.4/4.0 with strongest marks in HCI courses",
                     },
-                    {
-                        "doc_type": "diploma",
-                        "note": "Already holds MSc in CS from UTokyo (2024)",
-                    },
+                    {"doc_type": "diploma", "note": "Already holds MSc in CS from UTokyo (2024)"},
                 ],
             },
             {
@@ -531,17 +463,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "between Japanese manufacturing and European tech. Unique perspective "
                     "for the cohort."
                 ),
-                "scores": {
-                    "academic": 7,
-                    "motivation": 8,
-                    "recommendation": 7,
-                    "experience": 7,
-                },
+                "scores": {"academic": 7, "motivation": 8, "recommendation": 7, "experience": 7},
                 "document_references": [
                     {
                         "doc_type": "motivation_letter",
                         "note": "Articulates Japan-Europe technology bridge vision — unique angle",
-                    },
+                    }
                 ],
             },
             {
@@ -554,17 +481,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "systems-level or ML expertise that would distinguish this candidate. "
                     "The business background is a plus but technical depth is a question."
                 ),
-                "scores": {
-                    "academic": 7,
-                    "motivation": 7,
-                    "recommendation": 7,
-                    "experience": 6,
-                },
+                "scores": {"academic": 7, "motivation": 7, "recommendation": 7, "experience": 6},
                 "document_references": [
                     {
                         "doc_type": "transcript",
                         "note": "Master's thesis in HCI — competent but not deeply technical",
-                    },
+                    }
                 ],
             },
         ],
@@ -620,17 +542,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "mathematics but weak in applied courses. Does not meet the academic "
                     "threshold for competitive admission."
                 ),
-                "scores": {
-                    "academic": 4,
-                    "motivation": 3,
-                    "recommendation": 4,
-                    "experience": 3,
-                },
+                "scores": {"academic": 4, "motivation": 3, "recommendation": 4, "experience": 3},
                 "document_references": [
                     {
                         "doc_type": "transcript",
                         "note": "Inconsistent grades — strong math (4.5+) but weak applied courses (3.0-3.5)",
-                    },
+                    }
                 ],
             },
             {
@@ -644,12 +561,7 @@ MOCK_EVALUATIONS: list[dict] = [
                     "career goals aligned with the program. Recommendation letters are "
                     "generic and lack enthusiasm."
                 ),
-                "scores": {
-                    "academic": 4,
-                    "motivation": 2,
-                    "recommendation": 3,
-                    "experience": 3,
-                },
+                "scores": {"academic": 4, "motivation": 2, "recommendation": 3, "experience": 3},
                 "document_references": [
                     {
                         "doc_type": "motivation_letter",
@@ -671,17 +583,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "evidence of practical application. Technical preparation is "
                     "insufficient for the MTE program."
                 ),
-                "scores": {
-                    "academic": 4,
-                    "motivation": 3,
-                    "recommendation": 3,
-                    "experience": 2,
-                },
+                "scores": {"academic": 4, "motivation": 3, "recommendation": 3, "experience": 2},
                 "document_references": [
                     {
                         "doc_type": "cv",
                         "note": "No internships, projects, or extracurricular technical activities listed",
-                    },
+                    }
                 ],
             },
         ],
@@ -735,17 +642,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "advanced topics is limited by curriculum. Academic record is strong "
                     "within institutional context."
                 ),
-                "scores": {
-                    "academic": 7,
-                    "motivation": 9,
-                    "recommendation": 8,
-                    "experience": 9,
-                },
+                "scores": {"academic": 7, "motivation": 9, "recommendation": 8, "experience": 9},
                 "document_references": [
                     {
                         "doc_type": "transcript",
                         "note": "First-class honours — top of graduating class in Computer Science",
-                    },
+                    }
                 ],
             },
             {
@@ -759,12 +661,7 @@ MOCK_EVALUATIONS: list[dict] = [
                     "articulate, specific, and grounded in real experience. Would add "
                     "tremendous diversity and energy to the cohort."
                 ),
-                "scores": {
-                    "academic": 7,
-                    "motivation": 10,
-                    "recommendation": 9,
-                    "experience": 10,
-                },
+                "scores": {"academic": 7, "motivation": 10, "recommendation": 9, "experience": 10},
                 "document_references": [
                     {
                         "doc_type": "motivation_letter",
@@ -786,17 +683,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "Some gaps in theoretical CS (limited access to advanced courses) but "
                     "practical ability is clearly strong."
                 ),
-                "scores": {
-                    "academic": 7,
-                    "motivation": 9,
-                    "recommendation": 8,
-                    "experience": 9,
-                },
+                "scores": {"academic": 7, "motivation": 9, "recommendation": 8, "experience": 9},
                 "document_references": [
                     {
                         "doc_type": "cv",
                         "note": "Full-stack fintech app: React Native + Node.js + PostgreSQL",
-                    },
+                    }
                 ],
             },
         ],
@@ -849,17 +741,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "Coursework spans CS, applied mathematics, and management science. "
                     "Academic preparation is excellent and well-suited for MTE."
                 ),
-                "scores": {
-                    "academic": 10,
-                    "motivation": 8,
-                    "recommendation": 9,
-                    "experience": 8,
-                },
+                "scores": {"academic": 10, "motivation": 8, "recommendation": 9, "experience": 8},
                 "document_references": [
                     {
                         "doc_type": "transcript",
                         "note": "4.8/5.0 at MIT with dual focus in CS and management science",
-                    },
+                    }
                 ],
             },
             {
@@ -872,17 +759,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "letter reads somewhat transactional — focused on career advancement "
                     "rather than a specific vision. Still a strong candidate overall."
                 ),
-                "scores": {
-                    "academic": 10,
-                    "motivation": 7,
-                    "recommendation": 9,
-                    "experience": 8,
-                },
+                "scores": {"academic": 10, "motivation": 7, "recommendation": 9, "experience": 8},
                 "document_references": [
                     {
                         "doc_type": "motivation_letter",
                         "note": "Well-written but career-focused rather than vision-driven",
-                    },
+                    }
                 ],
             },
             {
@@ -895,12 +777,7 @@ MOCK_EVALUATIONS: list[dict] = [
                     "engineering work (backend systems, data pipelines). Strong technical "
                     "preparation."
                 ),
-                "scores": {
-                    "academic": 10,
-                    "motivation": 7,
-                    "recommendation": 9,
-                    "experience": 8,
-                },
+                "scores": {"academic": 10, "motivation": 7, "recommendation": 9, "experience": 8},
                 "document_references": [
                     {
                         "doc_type": "cv",
@@ -959,7 +836,7 @@ MOCK_EVALUATIONS: list[dict] = [
                 ),
                 "scores": {},
                 "document_references": [],
-            },
+            }
         ],
         "moderator": {
             "final_decision": "PENDING",
@@ -1003,17 +880,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "CS or mathematics courses on transcript. Academic preparation is "
                     "insufficient for a rigorous Master's program."
                 ),
-                "scores": {
-                    "academic": 3,
-                    "motivation": 5,
-                    "recommendation": 4,
-                    "experience": 3,
-                },
+                "scores": {"academic": 3, "motivation": 5, "recommendation": 4, "experience": 3},
                 "document_references": [
                     {
                         "doc_type": "transcript",
                         "note": "2.8/4.0 — no advanced CS or math courses beyond introductory level",
-                    },
+                    }
                 ],
             },
             {
@@ -1027,12 +899,7 @@ MOCK_EVALUATIONS: list[dict] = [
                     "lecturers and don't speak to research potential or advanced skills. "
                     "Suggest exploring preparatory programs first."
                 ),
-                "scores": {
-                    "academic": 3,
-                    "motivation": 6,
-                    "recommendation": 4,
-                    "experience": 3,
-                },
+                "scores": {"academic": 3, "motivation": 6, "recommendation": 4, "experience": 3},
                 "document_references": [
                     {
                         "doc_type": "motivation_letter",
@@ -1053,17 +920,12 @@ MOCK_EVALUATIONS: list[dict] = [
                     "courses. No projects, no internships, no research experience. "
                     "The technical gap is too significant for the MTE program."
                 ),
-                "scores": {
-                    "academic": 3,
-                    "motivation": 5,
-                    "recommendation": 3,
-                    "experience": 2,
-                },
+                "scores": {"academic": 3, "motivation": 5, "recommendation": 3, "experience": 2},
                 "document_references": [
                     {
                         "doc_type": "cv",
                         "note": "Only retail and hospitality work experience — no technical roles",
-                    },
+                    }
                 ],
             },
         ],

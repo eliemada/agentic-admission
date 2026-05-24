@@ -31,7 +31,7 @@ from agentic_admission.agents.evaluators import (
     evaluate_motivation,
     evaluate_reference,
 )
-from agentic_admission.agents.gpa_gate import ThresholdVerdict
+from agentic_admission.agents.gpa_gate import EpflInternalBand, ThresholdVerdict
 from agentic_admission.agents.minor_advisor import recommend_minor
 from agentic_admission.curriculum.university_profiles import (
     format_university_context,
@@ -45,6 +45,19 @@ from agentic_admission.models.evaluation import (
 )
 
 _CLIENT_TIMEOUT: float = 120.0
+
+
+def _ensure_scorecard(result: AgentScorecard | BaseException) -> AgentScorecard:
+    """Re-raise evaluator failures, otherwise return the scorecard.
+
+    The Phase-1 ``asyncio.gather(return_exceptions=True)`` returns a
+    mixed tuple where any evaluator failure surfaces as a ``BaseException``.
+    Evaluators must succeed for the panel to deliberate, so any exception
+    here is fatal — re-raise it.
+    """
+    if isinstance(result, BaseException):
+        raise result
+    return result
 
 
 def _select_profile(
@@ -115,6 +128,7 @@ async def evaluate_candidate(
     school_name: str = "",
     is_epfl_internal: bool = False,
     threshold_verdict: ThresholdVerdict | None = None,
+    epfl_band: EpflInternalBand | None = None,
     gpa_confidence: float = 1.0,
     model: str,
     base_url: str,
@@ -205,7 +219,11 @@ async def evaluate_candidate(
             client=client,
         )
         devils_task = evaluate_devils_advocate(
-            full_dossier_text=full_dossier_text, model=model, base_url=base_url, client=client
+            full_dossier_text=full_dossier_text,
+            model=model,
+            base_url=base_url,
+            client=client,
+            is_epfl_internal=is_epfl_internal,
         )
         minor_task = recommend_minor(
             transcript_text=transcript_text,
@@ -222,7 +240,11 @@ async def evaluate_candidate(
         # Use return_exceptions=True for ALL tasks so the shared client stays
         # alive until every task finishes (prevents "client closed" race).
         all_results = await asyncio.gather(
-            academic_task, reference_task, motivation_task, devils_task, minor_task,
+            academic_task,
+            reference_task,
+            motivation_task,
+            devils_task,
+            minor_task,
             return_exceptions=True,
         )
 
@@ -230,19 +252,20 @@ async def evaluate_candidate(
         minor_result = all_results[4]
 
         # Re-raise the first evaluator failure (evaluators must succeed)
-        for result in evaluator_results:
-            if isinstance(result, BaseException):
-                raise result
-
-        scorecards: tuple[AgentScorecard, ...] = tuple(evaluator_results)  # type: ignore[assignment]
+        # and narrow the type to the post-check ``AgentScorecard`` form.
+        scorecards: tuple[AgentScorecard, ...] = tuple(
+            _ensure_scorecard(r) for r in evaluator_results
+        )
 
         # Apply the GPA gate's clamp on academic_strength (no-op when verdict
-        # is ABOVE/NEAR/UNKNOWN). This makes the Chair's synthesis consistent
-        # with the post-synthesis hard-reject below.
+        # is ABOVE/NEAR/UNKNOWN, or when the EPFL-internal band is ACCEPT/
+        # DISCUSS — only the REJECT band clamps). Keeps Chair synthesis
+        # consistent with the post-synthesis hard-reject below.
         scorecards = clamp_academic_strength_below_threshold(
             scorecards,
             threshold_verdict=threshold_verdict,
             gpa_confidence=gpa_confidence,
+            epfl_band=epfl_band,
         )
 
         minor_rec: MinorRecommendation | None = (
@@ -293,6 +316,7 @@ async def evaluate_candidate(
             profile=profile,
             threshold_verdict=threshold_verdict,
             gpa_confidence=gpa_confidence,
+            epfl_band=epfl_band,
         )
 
         # Attach minor recommendation to the verdict

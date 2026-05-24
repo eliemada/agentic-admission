@@ -68,10 +68,7 @@ def _bucket(title: str) -> str | None:
 # Match a markdown row with a title-ish cell and a numeric Marks cell.
 # The Coventry diploma supplement table looks like:
 #   |    1 | 101MMS | Engineering Mathematics 1 | 4 | 86 | P | 1 | 20 | 10 |
-_ROW_RE = re.compile(
-    r"^\|[^|]*\|[^|]*\|\s*([^|]+?)\s*\|[^|]*\|\s*(\d{1,3})\s*\|",
-    re.MULTILINE,
-)
+_ROW_RE = re.compile(r"^\|[^|]*\|[^|]*\|\s*([^|]+?)\s*\|[^|]*\|\s*(\d{1,3})\s*\|", re.MULTILINE)
 
 
 def parse_marks(transcript: str) -> list[tuple[str, int, str | None]]:

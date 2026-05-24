@@ -103,10 +103,7 @@ def save_cohort(semester: str) -> Path:
     _OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
     output_path = _OUTPUT_ROOT / f"cohort_{semester}.json"
     data = _records_to_dicts(records)
-    output_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info("Saved {} records to {}", len(data), output_path)
     return output_path
 

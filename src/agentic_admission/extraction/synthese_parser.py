@@ -49,10 +49,7 @@ class SyntheseRecord:
 _LABELS = {
     # Personal data
     "last_name": ["Nom", "Legal Family Name"],
-    "first_names": [
-        "Prénoms (tels",
-        "First names (as written in",
-    ],
+    "first_names": ["Prénoms (tels", "First names (as written in"],
     "first_names_skip": ["qu'indiqués sur papiers", "d'identité)", "ID)"],
     "sex": ["Sexe", "Sex"],
     "nationality": ["Nationalité", "Nationality (country of", "Citizenship"],
@@ -198,15 +195,11 @@ def parse_synthese(pdf_path: Path, folder_name: str = "") -> SyntheseRecord:
 
     last_name = _find_value(p1, _LABELS["last_name"])
     first_names = _find_value(
-        p1,
-        _LABELS["first_names"],
-        skip=[s.lower() for s in _LABELS["first_names_skip"]],
+        p1, _LABELS["first_names"], skip=[s.lower() for s in _LABELS["first_names_skip"]]
     )
     gender = _parse_gender(_find_value(p1, _LABELS["sex"]))
     nationality = _find_value(
-        p1,
-        _LABELS["nationality"],
-        skip=[s.lower() for s in _LABELS.get("nationality_skip", [])],
+        p1, _LABELS["nationality"], skip=[s.lower() for s in _LABELS.get("nationality_skip", [])]
     )
     application_id = _find_value(p1, _LABELS["application_id"])
 
@@ -221,15 +214,9 @@ def parse_synthese(pdf_path: Path, folder_name: str = "") -> SyntheseRecord:
         skip=[s.lower() for s in _LABELS.get("field_of_study_skip", [])],
     )
     study_level = _find_value(edu_lines, _LABELS["study_level"])
-    gpa = _find_value(
-        edu_lines,
-        _LABELS["gpa"],
-        skip=[s.lower() for s in _LABELS["gpa_skip"]],
-    )
+    gpa = _find_value(edu_lines, _LABELS["gpa"], skip=[s.lower() for s in _LABELS["gpa_skip"]])
     gpa_max = _find_value(
-        edu_lines,
-        _LABELS["gpa_max"],
-        skip=[s.lower() for s in _LABELS["gpa_max_skip"]],
+        edu_lines, _LABELS["gpa_max"], skip=[s.lower() for s in _LABELS["gpa_max_skip"]]
     )
 
     doc.close()

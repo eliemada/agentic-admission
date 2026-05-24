@@ -116,7 +116,7 @@ def _mock_gpa_llm(mocker: MockerFixture) -> None:
     """Patch ``complete`` to return a valid GpaExtraction without hitting an LLM."""
 
     async def fake_complete(
-        *, messages: Any, response_model: Any, model: Any, base_url: Any, **kwargs: Any,
+        *, messages: Any, response_model: Any, model: Any, base_url: Any, **kwargs: Any
     ) -> GpaExtraction:
         return response_model.model_validate(_SAMPLE_GPA.model_dump())
 
@@ -145,7 +145,7 @@ class TestExtractGpaWithLLM:
 
     async def test_returns_gpa_extraction(self):
         result = await extract_gpa(
-            "GPA: 3.7/4.0 at MIT, BSc Computer Science", model="test", base_url="http://test",
+            "GPA: 3.7/4.0 at MIT, BSc Computer Science", model="test", base_url="http://test"
         )
         assert isinstance(result, GpaExtraction)
         assert result.gpa_value == "3.7"
@@ -153,13 +153,13 @@ class TestExtractGpaWithLLM:
 
     async def test_normalized_score(self):
         result = await extract_gpa(
-            "Transcript from MIT with 3.7/4.0", model="test", base_url="http://test",
+            "Transcript from MIT with 3.7/4.0", model="test", base_url="http://test"
         )
         assert result.gpa_normalized == 92.5
 
     async def test_institution_extracted(self):
         result = await extract_gpa(
-            "Massachusetts Institute of Technology transcript", model="test", base_url="http://test",
+            "Massachusetts Institute of Technology transcript", model="test", base_url="http://test"
         )
         assert result.institution_name == "MIT"
 

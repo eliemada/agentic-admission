@@ -9,10 +9,10 @@ Run with:
 
 from __future__ import annotations
 
-import asyncio
 import io
 import json
 from collections.abc import AsyncGenerator
+from datetime import UTC
 from pathlib import Path
 
 import httpx
@@ -80,10 +80,7 @@ def list_candidates(semester: str | None = None) -> list[dict]:
 def _enrich_with_overrides(verdicts: list[dict]) -> list[dict]:
     """Merge committee overrides into verdict dicts for export."""
     overrides = _load_overrides()
-    return [
-        {**v, "_override": overrides.get(v["candidate_id"], {})}
-        for v in verdicts
-    ]
+    return [{**v, "_override": overrides.get(v["candidate_id"], {})} for v in verdicts]
 
 
 @app.get("/api/candidates/export.csv")
@@ -158,7 +155,7 @@ def _save_overrides(overrides: dict[str, dict]) -> None:
     """Save committee overrides to JSON file."""
     _OVERRIDES_PATH.parent.mkdir(parents=True, exist_ok=True)
     _OVERRIDES_PATH.write_text(
-        json.dumps(overrides, indent=2, ensure_ascii=False), encoding="utf-8",
+        json.dumps(overrides, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
 
@@ -171,13 +168,13 @@ def list_overrides() -> dict[str, dict]:
 @app.put("/api/overrides/{candidate_id}")
 def set_override(candidate_id: str, override: CommitteeOverride) -> dict:
     """Set or update a committee override for a candidate."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     overrides = _load_overrides()
     overrides[candidate_id] = {
         "decision": override.decision,
         "comment": override.comment,
-        "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+        "updated_at": datetime.now(tz=UTC).isoformat(),
     }
     _save_overrides(overrides)
     return overrides[candidate_id]
@@ -282,10 +279,7 @@ def export_universities_excel() -> StreamingResponse:
 @app.get("/api/cohort/semesters")
 def list_cohort_semesters() -> list[str]:
     """Return available cohort semesters from cohort JSON files."""
-    semesters = sorted(
-        p.stem.removeprefix("cohort_")
-        for p in _COHORT_DIR.glob("cohort_*.json")
-    )
+    semesters = sorted(p.stem.removeprefix("cohort_") for p in _COHORT_DIR.glob("cohort_*.json"))
     return semesters
 
 
@@ -371,14 +365,16 @@ def list_candidate_documents(semester: str, candidate: str) -> list[dict]:
         has_text = (_TEXT_DIR / semester / candidate / doc_name).exists()
         has_anon = (_ANON_DIR / semester / candidate / doc_name).exists()
 
-        docs.append({
-            "folder": doc_name,
-            "type": doc_type,
-            "label": _doc_type_label(doc_type),
-            "has_pdf": has_pdf,
-            "has_text": has_text,
-            "has_anonymized": has_anon,
-        })
+        docs.append(
+            {
+                "folder": doc_name,
+                "type": doc_type,
+                "label": _doc_type_label(doc_type),
+                "has_pdf": has_pdf,
+                "has_text": has_text,
+                "has_anonymized": has_anon,
+            }
+        )
 
     return docs
 
@@ -530,7 +526,11 @@ def _load_university_context(school_name: str) -> str:
                     gpa_max = str(rows.get("gpa_max", [""])[i] or "")
                     threshold = str(rows.get("gpa_scale", [""])[i] or "")
                     quality = str(rows.get("school_quality", [""])[i] or "")
-                    decision = str(rows.get("decision_final", [""])[i] or rows.get("decision_section", [""])[i] or "")
+                    decision = str(
+                        rows.get("decision_final", [""])[i]
+                        or rows.get("decision_section", [""])[i]
+                        or ""
+                    )
                     if gpa:
                         school_gpas.append(f"{gpa}/{gpa_max}" if gpa_max else gpa)
                     if threshold:
@@ -607,10 +607,7 @@ def _load_llm_settings() -> tuple[str, str, str]:
     return settings.model_name, settings.model_base_url, ""
 
 
-async def _stream_chat(
-    system_prompt: str,
-    messages: list[dict[str, str]],
-) -> AsyncGenerator[str, None]:
+async def _stream_chat(system_prompt: str, messages: list[dict[str, str]]) -> AsyncGenerator[str]:
     """Stream chat completion tokens from the LLM."""
     model, base_url, api_key = _load_llm_settings()
 
@@ -632,28 +629,27 @@ async def _stream_chat(
         if _settings.openrouter_provider:
             payload["provider"] = {"order": [_settings.openrouter_provider]}
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        async with client.stream(
-            "POST",
-            f"{base_url}/chat/completions",
-            json=payload,
-            headers=headers,
-        ) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                data = line[6:]
-                if data == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data)
-                    delta = chunk["choices"][0].get("delta", {})
-                    token = delta.get("content", "")
-                    if token:
-                        yield token
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
+    async with (
+        httpx.AsyncClient(timeout=120.0) as client,
+        client.stream(
+            "POST", f"{base_url}/chat/completions", json=payload, headers=headers
+        ) as response,
+    ):
+        response.raise_for_status()
+        async for line in response.aiter_lines():
+            if not line.startswith("data: "):
+                continue
+            data = line[6:]
+            if data == "[DONE]":
+                break
+            try:
+                chunk = json.loads(data)
+                delta = chunk["choices"][0].get("delta", {})
+                token = delta.get("content", "")
+                if token:
+                    yield token
+            except (json.JSONDecodeError, KeyError, IndexError):
+                continue
 
 
 @app.post("/api/chat")
@@ -680,10 +676,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
     # Build message list: history + new user message
     messages = [*req.history, {"role": "user", "content": req.message}]
 
-    return StreamingResponse(
-        _stream_chat(system_prompt, messages),
-        media_type="text/plain",
-    )
+    return StreamingResponse(_stream_chat(system_prompt, messages), media_type="text/plain")
 
 
 @app.post("/api/chat/sync")

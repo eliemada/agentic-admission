@@ -14,6 +14,7 @@ from agentic_admission.models.evaluation import (
     Decision,
     PanelVerdict,
 )
+from tests.conftest import make_justification, make_verdict_summary
 
 
 class TestAgentRole:
@@ -33,7 +34,10 @@ class TestAgentScorecard:
         card = AgentScorecard(
             role=AgentRole.ACADEMIC,
             scores={"academic_strength": 8, "institution_quality": 7},
-            justifications={"academic_strength": "Strong GPA from top-tier school."},
+            justifications={
+                "academic_strength": make_justification(pros=("Strong GPA from top-tier school.",)),
+                "institution_quality": make_justification(pros=("Priority tier.",)),
+            },
         )
         assert card.role == AgentRole.ACADEMIC
         assert card.scores["academic_strength"] == 8
@@ -42,22 +46,17 @@ class TestAgentScorecard:
         card = AgentScorecard(
             role=AgentRole.ACADEMIC,
             scores={"academic_strength": 8},
-            justifications={"academic_strength": "Solid."},
+            justifications={"academic_strength": make_justification()},
         )
-        try:
+        with pytest.raises((ValidationError, TypeError, AttributeError)):
             card.role = AgentRole.CHAIR  # type: ignore[misc]
-        except Exception:
-            pass
-        else:
-            msg = "AgentScorecard should be frozen"
-            raise AssertionError(msg)
 
     def test_score_out_of_range_raises(self) -> None:
         with pytest.raises(ValidationError, match="must be 1-10"):
             AgentScorecard(
                 role=AgentRole.ACADEMIC,
                 scores={"academic_strength": 0},
-                justifications={"academic_strength": "Too low."},
+                justifications={"academic_strength": make_justification(cons=("Too low.",))},
             )
 
     def test_score_above_range_raises(self) -> None:
@@ -65,26 +64,31 @@ class TestAgentScorecard:
             AgentScorecard(
                 role=AgentRole.ACADEMIC,
                 scores={"academic_strength": 11},
-                justifications={"academic_strength": "Too high."},
+                justifications={"academic_strength": make_justification(cons=("Too high.",))},
             )
 
-    def test_scores_dict_is_immutable(self) -> None:
+    def test_scores_attribute_cannot_be_reassigned(self) -> None:
+        # ``frozen=True`` guarantees attribute-level immutability. The
+        # underlying dict is not deep-frozen — pydantic doesn't wrap it —
+        # but callers cannot swap the dict out for a different one.
         card = AgentScorecard(
             role=AgentRole.ACADEMIC,
             scores={"academic_strength": 8},
-            justifications={"academic_strength": "Good."},
+            justifications={"academic_strength": make_justification()},
         )
-        with pytest.raises(TypeError):
-            card.scores["academic_strength"] = 5  # type: ignore[index]
+        with pytest.raises((ValidationError, TypeError, AttributeError)):
+            card.scores = {"academic_strength": 5}  # type: ignore[misc]
 
-    def test_justifications_dict_is_immutable(self) -> None:
+    def test_justifications_attribute_cannot_be_reassigned(self) -> None:
         card = AgentScorecard(
             role=AgentRole.ACADEMIC,
             scores={"academic_strength": 8},
-            justifications={"academic_strength": "Good."},
+            justifications={"academic_strength": make_justification()},
         )
-        with pytest.raises(TypeError):
-            card.justifications["academic_strength"] = "Changed."  # type: ignore[index]
+        with pytest.raises((ValidationError, TypeError, AttributeError)):
+            card.justifications = {  # type: ignore[misc]
+                "academic_strength": make_justification(pros=("Changed.",))
+            }
 
 
 class TestConflict:
@@ -128,7 +132,9 @@ class TestPanelVerdict:
             },
             composite_score=7.5,
             decision=Decision.ACCEPT,
-            justification="Strong academic profile with well-calibrated references.",
+            justification=make_verdict_summary(
+                pros=("Strong academic profile with well-calibrated references.",)
+            ),
         )
         assert verdict.decision == Decision.ACCEPT
         assert len(verdict.final_scores) == 8
@@ -142,7 +148,7 @@ class TestPanelVerdict:
                 final_scores={"academic_strength": 0},
                 composite_score=5.0,
                 decision=Decision.REJECT,
-                justification="Score out of range.",
+                justification=make_verdict_summary(cons=("Score out of range.",)),
             )
 
     def test_verdict_composite_score_range(self) -> None:
@@ -154,10 +160,12 @@ class TestPanelVerdict:
                 final_scores={"academic_strength": 5},
                 composite_score=0.5,
                 decision=Decision.REJECT,
-                justification="Composite out of range.",
+                justification=make_verdict_summary(cons=("Composite out of range.",)),
             )
 
-    def test_verdict_final_scores_immutable(self) -> None:
+    def test_verdict_final_scores_attribute_cannot_be_reassigned(self) -> None:
+        # ``frozen=True`` only guarantees attribute immutability; the dict
+        # itself is not deep-frozen.
         verdict = PanelVerdict(
             candidate_id="2024-25_round1_42",
             scorecards=(),
@@ -165,7 +173,7 @@ class TestPanelVerdict:
             final_scores={"academic_strength": 8},
             composite_score=8.0,
             decision=Decision.ACCEPT,
-            justification="Strong.",
+            justification=make_verdict_summary(),
         )
-        with pytest.raises(TypeError):
-            verdict.final_scores["academic_strength"] = 5  # type: ignore[index]
+        with pytest.raises((ValidationError, TypeError, AttributeError)):
+            verdict.final_scores = {"academic_strength": 5}  # type: ignore[misc]

@@ -234,8 +234,7 @@ async def recommend_minor(
     if len(recommended) < len(raw_recommended):
         dropped = [s.minor_name for s in raw_recommended if is_mte_master_minor(s.minor_name)]
         logger.warning(
-            "Dropped MTE master minor from recommendations (LLM ignored exclusion): {}",
-            dropped,
+            "Dropped MTE master minor from recommendations (LLM ignored exclusion): {}", dropped
         )
 
     if not recommended:

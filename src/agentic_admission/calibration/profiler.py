@@ -50,9 +50,7 @@ def _normalize_key(name: str) -> str:
 
 
 def _collect_letters_for_candidate(
-    anonymized_root: Path,
-    semester: str,
-    folder_name: str,
+    anonymized_root: Path, semester: str, folder_name: str
 ) -> list[str]:
     """Read all recommendation letter texts for a specific candidate.
 
@@ -111,8 +109,7 @@ def _fallback_key(country: str, quality: str) -> str:
 
 
 def _collect_candidates_with_letters(
-    parquet_path: Path,
-    anonymized_root: Path,
+    parquet_path: Path, anonymized_root: Path
 ) -> list[dict[str, str]]:
     """Scan Parquet and match candidates to their anonymized letters.
 
@@ -154,15 +151,17 @@ def _collect_candidates_with_letters(
         for fk in folder_keys:
             letters = _collect_letters_for_candidate(anonymized_root, semester, fk)
             if letters:
-                result.append({
-                    "school_name": school_name,
-                    "school_country": school_country,
-                    "school_quality": school_quality,
-                    "decision": decision,
-                    "semester": semester,
-                    "folder_name": fk,
-                    "letter_text": "\n\n---\n\n".join(letters),
-                })
+                result.append(
+                    {
+                        "school_name": school_name,
+                        "school_country": school_country,
+                        "school_quality": school_quality,
+                        "decision": decision,
+                        "semester": semester,
+                        "folder_name": fk,
+                        "letter_text": "\n\n---\n\n".join(letters),
+                    }
+                )
                 break
 
     logger.info("Found {} candidates with reference letters", len(result))
@@ -217,8 +216,7 @@ def _apply_fallback_hierarchy(
 
 
 def _build_school_groups(
-    parquet_path: Path,
-    anonymized_root: Path,
+    parquet_path: Path, anonymized_root: Path
 ) -> dict[str, list[dict[str, str]]]:
     """Group candidates by school with their reference letter texts.
 
@@ -259,11 +257,7 @@ def _build_school_groups(
     return result
 
 
-def _generate_single_profile(
-    client: OpenAI,
-    group_key: str,
-    members: list[dict[str, str]],
-) -> str:
+def _generate_single_profile(client: OpenAI, group_key: str, members: list[dict[str, str]]) -> str:
     """Generate a calibration profile for one group via OpenRouter.
 
     Parameters
@@ -288,8 +282,7 @@ def _generate_single_profile(
     user_prompt = (
         f"Group: {group_key}\n"
         f"Number of candidates: {len(members)}\n\n"
-        "## Reference Letters\n\n"
-        + "\n\n---\n\n".join(letter_sections)
+        "## Reference Letters\n\n" + "\n\n---\n\n".join(letter_sections)
     )
 
     extra: dict = {}
@@ -341,10 +334,7 @@ def generate_profiles(
 
     groups = _build_school_groups(parquet_path, anonymized_root)
 
-    client = OpenAI(
-        api_key=settings.openrouter_api_key,
-        base_url=settings.openrouter_base_url,
-    )
+    client = OpenAI(api_key=settings.openrouter_api_key, base_url=settings.openrouter_base_url)
 
     count = 0
     for group_key, members in sorted(groups.items()):
@@ -381,10 +371,7 @@ def generate_profiles(
 
 
 def load_calibration_profile(
-    school_name: str,
-    school_country: str,
-    school_quality: str,
-    profiles_dir: Path | None = None,
+    school_name: str, school_country: str, school_quality: str, profiles_dir: Path | None = None
 ) -> str:
     """Load the best matching calibration profile for a candidate.
 
@@ -435,10 +422,7 @@ def load_calibration_profile(
             return content
 
     logger.debug(
-        "No calibration profile found for {} / {} / {}",
-        school_name,
-        school_country,
-        school_quality,
+        "No calibration profile found for {} / {} / {}", school_name, school_country, school_quality
     )
     return ""
 
@@ -464,19 +448,10 @@ def main() -> None:
         default=None,
         help="Output directory for profiles (default: from .env)",
     )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Regenerate existing profiles",
-    )
+    parser.add_argument("--force", action="store_true", help="Regenerate existing profiles")
     args = parser.parse_args()
 
-    count = generate_profiles(
-        args.parquet,
-        args.anonymized_root,
-        args.output_dir,
-        force=args.force,
-    )
+    count = generate_profiles(args.parquet, args.anonymized_root, args.output_dir, force=args.force)
     logger.info("Done. {} profiles generated.", count)
 
 

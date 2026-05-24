@@ -290,11 +290,7 @@ def _run_phase1(
 
 
 def _run_phase2(
-    ocr_queue: list[tuple[Path, Path]],
-    *,
-    backend: str,
-    dry_run: bool,
-    report: ExtractionReport,
+    ocr_queue: list[tuple[Path, Path]], *, backend: str, dry_run: bool, report: ExtractionReport
 ) -> None:
     """Phase 2: OCR scanned PDFs via Docling VLM backend."""
     if not ocr_queue:
@@ -328,20 +324,12 @@ def _run_phase2(
 
         if i % 50 == 0:
             logger.info(
-                "Phase 2 progress: {}/{} OCR'd ({} errors)",
-                i,
-                len(ocr_queue),
-                len(report.errors),
+                "Phase 2 progress: {}/{} OCR'd ({} errors)", i, len(ocr_queue), len(report.errors)
             )
 
 
 def extract_texts(
-    src: Path,
-    dst: Path,
-    *,
-    backend: str = "local",
-    dry_run: bool = False,
-    force: bool = False,
+    src: Path, dst: Path, *, backend: str = "local", dry_run: bool = False, force: bool = False
 ) -> ExtractionReport:
     """Two-phase extraction: direct text first, then OCR for scanned PDFs.
 

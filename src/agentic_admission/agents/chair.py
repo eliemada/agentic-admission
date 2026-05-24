@@ -8,7 +8,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from agentic_admission.agents.evaluation_profile import EXTERNAL_PROFILE, EvaluationProfile
-from agentic_admission.agents.gpa_gate import ThresholdDirection, ThresholdVerdict
+from agentic_admission.agents.gpa_gate import EpflInternalBand, ThresholdDirection, ThresholdVerdict
 from agentic_admission.agents.llm_client import ChatMessage, complete
 from agentic_admission.agents.prompts import AGENT_PROMPTS
 from agentic_admission.models.evaluation import (
@@ -31,33 +31,48 @@ if TYPE_CHECKING:
 _MAX_DEBATE_ROUNDS = 2
 _DEFAULT_DIMENSION_SCORE: int = 5
 
-# Composite-score cutoffs for the deterministic decision rule. Calibrated
-# against the 2025-26-spring cohort (128 candidates) so the accept rate
-# (~37%) matches the committee's historical band of 40-50/128.
+# Composite-score cutoffs for the deterministic decision rule.
+#
+# Asymmetric utility (committee-stated 2026-05-11): false admits are
+# acceptable (committee re-reviews waitlist), false rejects are not.
+#
+# Three-band rule:
+#  - composite >= ACCEPT_FLOOR  → ACCEPT
+#  - REJECT_FLOOR ≤ comp < ACC  → WAITLIST (borderline, send to committee)
+#  - composite < REJECT_FLOOR   → REJECT (auto-handle clearly weak)
+#
+# REJECT_FLOOR was calibrated against the 2024-25 fall ground truth: of 111
+# system-waitlist candidates, ZERO with composite < 7.0 had been admitted
+# by the committee. So REJECT_FLOOR=7.0 (ext) auto-rejects 50+ candidates
+# without any false-reject risk, while keeping borderlines (7.0-8.0) on
+# waitlist for human review.
+#
+# EPFL-internal floors are lower (the academic_strength dimension is
+# compressed by zero-weighted reference dims). REJECT_FLOOR=6.5 keeps
+# Maillard, Holtz, Nguyen, Gruber et al. (postfix2 composites 7.17-7.60)
+# safely on waitlist.
 ACCEPT_COMPOSITE_FLOOR: float = 8.0
-WAITLIST_COMPOSITE_FLOOR: float = 7.5
-"""Composite-score thresholds applied AFTER the LLM produces dimension scores.
-
-The LLM's own ``decision`` field is advisory: in the 2025-26-spring
-backtest the LLM returned 79/128 accepts under a stated rule that should
-have produced 57. We derive the decision deterministically from the
-composite to keep accept rates calibrated and reproducible.
-"""
+ACCEPT_COMPOSITE_FLOOR_EPFL_INTERNAL: float = 7.5
+REJECT_COMPOSITE_FLOOR: float = 7.0
+REJECT_COMPOSITE_FLOOR_EPFL_INTERNAL: float = 6.5
 
 
-def decision_from_composite(composite: float) -> Decision:
-    """Map a composite score to ``accept`` / ``waitlist`` / ``reject``.
+def decision_from_composite(composite: float, *, is_epfl_internal: bool = False) -> Decision:
+    """Map a composite score to a 3-band decision.
 
     Parameters
     ----------
     composite
         Weighted dimension-score average, in [1.0, 10.0].
+    is_epfl_internal
+        When ``True``, applies the lower EPFL-internal floors (7.5/6.5)
+        instead of the default external floors (8.0/7.0).
 
     Returns
     -------
     Decision
-        ``ACCEPT`` if ``composite >= 8.0``, ``WAITLIST`` if
-        ``>= 7.5``, ``REJECT`` otherwise.
+        ``ACCEPT`` if ``composite >= accept_floor``, ``REJECT`` if
+        ``composite < reject_floor``, ``WAITLIST`` otherwise.
 
     Notes
     -----
@@ -65,17 +80,21 @@ def decision_from_composite(composite: float) -> Decision:
     applied AFTER this rule via :func:`apply_gate_overrides` and take
     precedence.
     """
-    if composite >= ACCEPT_COMPOSITE_FLOOR:
+    if is_epfl_internal:
+        accept_floor = ACCEPT_COMPOSITE_FLOOR_EPFL_INTERNAL
+        reject_floor = REJECT_COMPOSITE_FLOOR_EPFL_INTERNAL
+    else:
+        accept_floor = ACCEPT_COMPOSITE_FLOOR
+        reject_floor = REJECT_COMPOSITE_FLOOR
+    if composite >= accept_floor:
         return Decision.ACCEPT
-    if composite >= WAITLIST_COMPOSITE_FLOOR:
-        return Decision.WAITLIST
-    return Decision.REJECT
+    if composite < reject_floor:
+        return Decision.REJECT
+    return Decision.WAITLIST
 
 
 def compute_composite(
-    final_scores: dict[str, int],
-    *,
-    weights: Mapping[str, float] | None = None,
+    final_scores: dict[str, int], *, weights: Mapping[str, float] | None = None
 ) -> float:
     """Compute deterministic weighted composite from dimension scores.
 
@@ -96,17 +115,18 @@ def compute_composite(
     """
     weights = weights or EXTERNAL_PROFILE.weights
     total = sum(
-        final_scores.get(dim, _DEFAULT_DIMENSION_SCORE) * weight
-        for dim, weight in weights.items()
+        final_scores.get(dim, _DEFAULT_DIMENSION_SCORE) * weight for dim, weight in weights.items()
     )
     return max(1.0, min(10.0, round(total, 2)))
 
 
+# GPA-extraction confidence below which we route to WAITLIST instead of
+# trusting the score (the LLM's accept/reject becomes unreliable).
 _LOW_GPA_CONFIDENCE: float = 0.5
-"""GPA-extraction confidence below which we route to WAITLIST instead of trusting the score."""
 
+# Maximum allowed ``academic_strength`` when the GPA is below the SPE
+# threshold (gate clamps to keep the Chair's synthesis consistent).
 _BELOW_THRESHOLD_ACADEMIC_CAP: int = 4
-"""Maximum allowed ``academic_strength`` when the GPA is below the SPE threshold."""
 
 
 def apply_gate_overrides(
@@ -116,18 +136,24 @@ def apply_gate_overrides(
     cons: tuple[str, ...],
     threshold_verdict: ThresholdVerdict | None,
     gpa_confidence: float,
+    epfl_band: EpflInternalBand | None = None,
 ) -> tuple[Decision, tuple[str, ...], tuple[str, ...]]:
     """Apply deterministic gates AFTER the Chair has produced a synthesis.
 
-    Two policies, applied in order:
+    Policies, applied in order:
 
     1. **Confidence gate.** When the GPA extractor is unsure
        (``gpa_confidence < 0.5``), the LLM's accept/reject is unsafe;
        route to ``WAITLIST`` for committee review.
-    2. **Below-threshold hard reject.** When the gate verdict is BELOW
-       and confidence is sufficient, force ``REJECT`` regardless of what
-       the Chair said. The committee's policy ("below the bar = refused")
-       is mechanical and we encode it deterministically.
+    2. **EPFL-internal 3-band rule** (when ``epfl_band`` is supplied).
+       Implements Geraldine's 2026-05-12 policy on algebra+analysis avg:
+       ``ACCEPT`` (≥ 4.5) clears the gate, ``DISCUSS`` (4.0-4.5) forces
+       ``WAITLIST``, ``REJECT`` (< 4.0) forces ``REJECT``. This *replaces*
+       the generic BELOW gate for EPFL-internal candidates so a candidate
+       in the discuss band is not hard-rejected.
+    3. **Below-threshold hard reject** (non-EPFL or UNKNOWN band). When
+       the gate verdict is BELOW and confidence is sufficient, force
+       ``REJECT`` regardless of what the Chair said.
 
     Returns
     -------
@@ -143,10 +169,16 @@ def apply_gate_overrides(
         )
         return Decision.WAITLIST, pros, new_cons
 
-    if (
-        threshold_verdict is not None
-        and threshold_verdict.direction is ThresholdDirection.BELOW
-    ):
+    if epfl_band is not None and epfl_band is not EpflInternalBand.UNKNOWN:
+        return _apply_epfl_band_override(
+            decision=decision,
+            pros=pros,
+            cons=cons,
+            epfl_band=epfl_band,
+            threshold_verdict=threshold_verdict,
+        )
+
+    if threshold_verdict is not None and threshold_verdict.direction is ThresholdDirection.BELOW:
         new_cons = (
             *cons,
             f"GPA below SPE threshold (extracted {threshold_verdict.extracted_value} "
@@ -159,20 +191,61 @@ def apply_gate_overrides(
     return decision, pros, cons
 
 
+def _epfl_band_value_str(threshold_verdict: ThresholdVerdict | None) -> str:
+    """Render the candidate's evaluated value for the EPFL audit trail."""
+    if threshold_verdict is None or threshold_verdict.extracted_value is None:
+        return "?"
+    return f"{threshold_verdict.extracted_value:.2f}"
+
+
+def _apply_epfl_band_override(
+    *,
+    decision: Decision,
+    pros: tuple[str, ...],
+    cons: tuple[str, ...],
+    epfl_band: EpflInternalBand,
+    threshold_verdict: ThresholdVerdict | None,
+) -> tuple[Decision, tuple[str, ...], tuple[str, ...]]:
+    """3-band EPFL-internal rule override (Geraldine, 2026-05-12)."""
+    value_str = _epfl_band_value_str(threshold_verdict)
+    if epfl_band is EpflInternalBand.REJECT:
+        new_cons = (
+            *cons,
+            f"EPFL-internal algebra+analysis average {value_str}/6 "
+            "below 4.0 hard floor — gate rejected.",
+        )
+        return Decision.REJECT, pros, new_cons
+    if epfl_band is EpflInternalBand.DISCUSS:
+        new_cons = (
+            *cons,
+            f"EPFL-internal algebra+analysis average {value_str}/6 "
+            "in 4.0-4.5 discuss band — routed to waitlist for committee review.",
+        )
+        return Decision.WAITLIST, pros, new_cons
+    # ACCEPT band: candidate cleared the EPFL bar, keep the Chair's decision.
+    return decision, pros, cons
+
+
 def clamp_academic_strength_below_threshold(
     scorecards: tuple[AgentScorecard, ...],
     *,
     threshold_verdict: ThresholdVerdict | None,
     gpa_confidence: float,
+    epfl_band: EpflInternalBand | None = None,
 ) -> tuple[AgentScorecard, ...]:
-    """Clamp Academic Evaluator's ``academic_strength`` when GPA is below threshold.
+    """Clamp Academic Evaluator's ``academic_strength`` when the gate fires.
 
-    Mirrors the post-synthesis hard-reject: if the gate says BELOW with
-    sufficient confidence, the Academic scorecard's ``academic_strength``
-    is capped at :data:`_BELOW_THRESHOLD_ACADEMIC_CAP`. The Chair sees the
-    capped value during synthesis, so it is unlikely to argue for an
-    accept that the gate would then override anyway. This mostly serves
-    to keep the Chair's reasoning consistent with the final decision.
+    Mirrors the post-synthesis hard-reject: if the candidate would be
+    auto-rejected by the gate, the Academic scorecard's
+    ``academic_strength`` is capped at
+    :data:`_BELOW_THRESHOLD_ACADEMIC_CAP`. The Chair sees the capped value
+    during synthesis, so it is unlikely to argue for an accept that the
+    gate would then override anyway.
+
+    For EPFL-internal candidates we only clamp on the REJECT band (< 4.0):
+    a DISCUSS-band candidate (4.0-4.5) is borderline by committee policy,
+    not weak. Clamping to 4 would tank the composite and bias the Chair
+    against an essentially admissible dossier.
 
     Parameters
     ----------
@@ -182,15 +255,23 @@ def clamp_academic_strength_below_threshold(
         Output of :func:`agentic_admission.agents.gpa_gate.compare_to_threshold`.
     gpa_confidence
         :attr:`GpaExtraction.confidence` from the extractor.
+    epfl_band
+        Output of :func:`agentic_admission.agents.gpa_gate.epfl_internal_band`
+        for EPFL-internal candidates. When supplied, takes precedence over
+        the generic BELOW/ABOVE classification: only ``REJECT`` triggers
+        the clamp.
 
     Returns
     -------
     tuple[AgentScorecard, ...]
         New tuple of scorecards (the input is not mutated).
     """
-    if threshold_verdict is None or threshold_verdict.direction is not ThresholdDirection.BELOW:
-        return scorecards
     if gpa_confidence < _LOW_GPA_CONFIDENCE:
+        return scorecards
+    if epfl_band is not None and epfl_band is not EpflInternalBand.UNKNOWN:
+        if epfl_band is not EpflInternalBand.REJECT:
+            return scorecards
+    elif threshold_verdict is None or threshold_verdict.direction is not ThresholdDirection.BELOW:
         return scorecards
 
     out: list[AgentScorecard] = []
@@ -464,6 +545,7 @@ async def synthesize(
     profile: EvaluationProfile = EXTERNAL_PROFILE,
     threshold_verdict: ThresholdVerdict | None = None,
     gpa_confidence: float = 1.0,
+    epfl_band: EpflInternalBand | None = None,
 ) -> PanelVerdict:
     """Produce the final panel verdict.
 
@@ -494,6 +576,12 @@ async def synthesize(
     gpa_confidence
         Extractor confidence in [0, 1]. Below 0.5 routes the verdict to
         ``WAITLIST`` regardless of what the LLM said.
+    epfl_band
+        Result of :func:`agentic_admission.agents.gpa_gate.epfl_internal_band`
+        for EPFL-internal candidates. When supplied (not ``UNKNOWN``),
+        replaces the generic BELOW gate with the 3-band rule from
+        Geraldine (2026-05-12): ACCEPT keeps the Chair's call, DISCUSS
+        forces ``WAITLIST``, REJECT forces ``REJECT``.
 
     Returns
     -------
@@ -510,9 +598,7 @@ async def synthesize(
             sections.append(f"{header}\n{body}")
         debate_text = "\n\n".join(sections)
 
-    weight_description = ", ".join(
-        f"{dim} ({w:.0%})" for dim, w in profile.weights.items()
-    )
+    weight_description = ", ".join(f"{dim} ({w:.0%})" for dim, w in profile.weights.items())
     profile_note = (
         f"NOTE: This candidate is being scored under the {profile.name!r} profile. "
         "The composite score is computed automatically using these "
@@ -568,16 +654,16 @@ async def synthesize(
     }
 
     composite = compute_composite(final_scores, weights=profile.weights)
-    logger.info(
-        "Composite score for {} ({}): {:.2f}", candidate_id, profile.name, composite
-    )
+    logger.info("Composite score for {} ({}): {:.2f}", candidate_id, profile.name, composite)
 
     # Derive the decision deterministically from the composite. The LLM's
     # own decision field is advisory only — in the 2025-26-spring backtest
     # it was ~40% more lenient than its own stated accept rule. The
     # composite-based rule keeps accept rates calibrated to the committee's
     # historical band.
-    composite_decision = decision_from_composite(composite)
+    composite_decision = decision_from_composite(
+        composite, is_epfl_internal=profile.name == "epfl_internal"
+    )
     if composite_decision is not synthesis.decision:
         logger.info(
             "Composite rule for {}: {} -> {} (composite={:.2f})",
@@ -596,6 +682,7 @@ async def synthesize(
         cons=synthesis.cons,
         threshold_verdict=threshold_verdict,
         gpa_confidence=gpa_confidence,
+        epfl_band=epfl_band,
     )
     if final_decision is not composite_decision:
         logger.info(

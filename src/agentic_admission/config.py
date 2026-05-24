@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,9 +59,7 @@ class Settings(BaseSettings):
     def anonymizer_excluded_entities(self) -> frozenset[str]:
         """Parse comma-separated entity types into a frozenset."""
         return frozenset(
-            e.strip()
-            for e in self.anonymizer_excluded_entities_raw.split(",")
-            if e.strip()
+            e.strip() for e in self.anonymizer_excluded_entities_raw.split(",") if e.strip()
         )
 
 

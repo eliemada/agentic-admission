@@ -17,10 +17,7 @@ _DEFAULT_TOP_K = 5
 
 
 def retrieve_similar_letters(
-    candidate_letters: str,
-    *,
-    collection_name: str | None = None,
-    top_k: int = _DEFAULT_TOP_K,
+    candidate_letters: str, *, collection_name: str | None = None, top_k: int = _DEFAULT_TOP_K
 ) -> str:
     """Query zsearch for historical letters similar to the candidate's.
 
@@ -56,11 +53,7 @@ def retrieve_similar_letters(
     query = candidate_letters[:8000]
 
     try:
-        response = client.queries.top_snippets(
-            collection_name=name,
-            query=query,
-            k=top_k,
-        )
+        response = client.queries.top_snippets(collection_name=name, query=query, k=top_k)
     except Exception:
         logger.warning("zsearch query failed, returning empty historical letters")
         return ""
@@ -74,9 +67,7 @@ def retrieve_similar_letters(
         source = result.path or "unknown"
         score = f"{result.score:.3f}" if result.score is not None else "N/A"
         sections.append(
-            f"### Historical Letter {i} (score: {score})\n"
-            f"**Source:** {source}\n\n"
-            f"{result.content}"
+            f"### Historical Letter {i} (score: {score})\n**Source:** {source}\n\n{result.content}"
         )
 
     formatted = "\n\n---\n\n".join(sections)
@@ -126,9 +117,6 @@ def get_calibration_context(
         profiles_dir=profiles_dir,
     )
 
-    historical = retrieve_similar_letters(
-        candidate_letters,
-        top_k=top_k,
-    )
+    historical = retrieve_similar_letters(candidate_letters, top_k=top_k)
 
     return profile, historical

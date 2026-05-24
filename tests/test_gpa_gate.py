@@ -5,11 +5,13 @@ from __future__ import annotations
 import pytest
 
 from agentic_admission.agents.gpa_gate import (
+    EpflInternalBand,
     GradingSystem,
     ThresholdDirection,
     ThresholdVerdict,
     compare_to_threshold,
     detect_grading_system,
+    epfl_internal_band,
     epfl_internal_value,
 )
 
@@ -18,9 +20,7 @@ from agentic_admission.agents.gpa_gate import (
 #   (gpa_value, gpa_scale, threshold, expected_direction, expected_system)
 # ---------------------------------------------------------------------------
 
-_PARAMETRIC_CASES: tuple[
-    tuple[str, str, str, ThresholdDirection, GradingSystem], ...
-] = (
+_PARAMETRIC_CASES: tuple[tuple[str, str, str, ThresholdDirection, GradingSystem], ...] = (
     # US 4.0
     ("3.7", "4.0", "3.0/4.0", ThresholdDirection.ABOVE, GradingSystem.US_4),
     ("2.5", "4.0", "3.0/4.0", ThresholdDirection.BELOW, GradingSystem.US_4),
@@ -70,9 +70,7 @@ def test_compare_to_threshold_directions(
     expected_system: GradingSystem,
 ) -> None:
     """Per-system parametric coverage of ABOVE/NEAR/BELOW classification."""
-    verdict = compare_to_threshold(
-        gpa_value=gpa_value, gpa_scale=gpa_scale, threshold=threshold,
-    )
+    verdict = compare_to_threshold(gpa_value=gpa_value, gpa_scale=gpa_scale, threshold=threshold)
     assert verdict.direction is expected_direction, (
         f"{gpa_value!r} vs {threshold!r}: expected {expected_direction.value}, "
         f"got {verdict.direction.value} (gap {verdict.gap:+.2f})"
@@ -98,23 +96,17 @@ class TestUnknownInputs:
 
     def test_unparseable_value(self) -> None:
         # Garbled OCR — random non-numeric string.
-        v = compare_to_threshold(
-            gpa_value="--garbage--", gpa_scale="4.0", threshold="3.0/4.0",
-        )
+        v = compare_to_threshold(gpa_value="--garbage--", gpa_scale="4.0", threshold="3.0/4.0")
         assert v.direction is ThresholdDirection.UNKNOWN
         assert v.system is GradingSystem.US_4  # detection succeeded; parse failed
 
     def test_value_outside_system_range(self) -> None:
         # 4.5 in US 4.0 system is impossible — parser rejects.
-        v = compare_to_threshold(
-            gpa_value="4.5", gpa_scale="4.0", threshold="3.0/4.0",
-        )
+        v = compare_to_threshold(gpa_value="4.5", gpa_scale="4.0", threshold="3.0/4.0")
         assert v.direction is ThresholdDirection.UNKNOWN
 
     def test_unknown_system_falls_back_to_unknown(self) -> None:
-        v = compare_to_threshold(
-            gpa_value="hello", gpa_scale="bizarre", threshold="??",
-        )
+        v = compare_to_threshold(gpa_value="hello", gpa_scale="bizarre", threshold="??")
         assert v.direction is ThresholdDirection.UNKNOWN
 
 
@@ -135,9 +127,7 @@ class TestSystemDetection:
             ("First class", "", GradingSystem.UK_CLASS),
         ],
     )
-    def test_explicit_anchor(
-        self, scale: str, value: str, expected: GradingSystem
-    ) -> None:
+    def test_explicit_anchor(self, scale: str, value: str, expected: GradingSystem) -> None:
         assert detect_grading_system(scale, value) is expected
 
     def test_value_range_fallback_us(self) -> None:
@@ -181,9 +171,7 @@ class TestItalianLode:
         assert v.extracted_value == 30.5
 
     def test_cum_laude_alias(self) -> None:
-        v = compare_to_threshold(
-            gpa_value="30 cum laude", gpa_scale="30", threshold="30/30"
-        )
+        v = compare_to_threshold(gpa_value="30 cum laude", gpa_scale="30", threshold="30/30")
         assert v.direction is ThresholdDirection.ABOVE
 
 
@@ -217,10 +205,7 @@ class TestSystemMismatchFallback:
 
     def test_dutch_transcript_vs_percent_threshold_uses_normalized(self) -> None:
         v = compare_to_threshold(
-            gpa_value="7.37",
-            gpa_scale="10",
-            threshold="80%",
-            gpa_normalized=73.7,
+            gpa_value="7.37", gpa_scale="10", threshold="80%", gpa_normalized=73.7
         )
         assert v.system is GradingSystem.PERCENTAGE
         assert v.extracted_value == 73.7
@@ -230,10 +215,7 @@ class TestSystemMismatchFallback:
 
     def test_above_after_normalization(self) -> None:
         v = compare_to_threshold(
-            gpa_value="8.5",
-            gpa_scale="10",
-            threshold="80%",
-            gpa_normalized=85.0,
+            gpa_value="8.5", gpa_scale="10", threshold="80%", gpa_normalized=85.0
         )
         assert v.direction is ThresholdDirection.ABOVE
 
@@ -249,10 +231,7 @@ class TestSystemMismatchFallback:
     def test_systems_matching_does_not_trigger_fallback(self) -> None:
         # Candidate scale and threshold are both percentage — no fallback.
         v = compare_to_threshold(
-            gpa_value="85%",
-            gpa_scale="100",
-            threshold="80%",
-            gpa_normalized=85.0,
+            gpa_value="85%", gpa_scale="100", threshold="80%", gpa_normalized=85.0
         )
         assert v.direction is ThresholdDirection.ABOVE
         assert v.extracted_value == 85.0
@@ -281,15 +260,48 @@ class TestEpflInternalValue:
 
 
 @pytest.mark.unit
+class TestEpflInternalBand:
+    """Geraldine's 3-band rule (2026-05-12): >=4.5 accept, 4.0-4.5 discuss, <4.0 reject."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("4.50", EpflInternalBand.ACCEPT),
+            ("4.51", EpflInternalBand.ACCEPT),
+            ("5.20", EpflInternalBand.ACCEPT),
+            ("6.00", EpflInternalBand.ACCEPT),
+            ("4.49", EpflInternalBand.DISCUSS),
+            ("4.31", EpflInternalBand.DISCUSS),  # the Maillard case
+            ("4.00", EpflInternalBand.DISCUSS),
+            ("3.99", EpflInternalBand.REJECT),
+            ("3.50", EpflInternalBand.REJECT),
+            ("1.00", EpflInternalBand.REJECT),
+        ],
+    )
+    def test_band_boundaries(self, value: str, expected: EpflInternalBand) -> None:
+        assert epfl_internal_band(value) is expected
+
+    def test_none_returns_unknown(self) -> None:
+        assert epfl_internal_band(None) is EpflInternalBand.UNKNOWN
+
+    def test_empty_returns_unknown(self) -> None:
+        assert epfl_internal_band("") is EpflInternalBand.UNKNOWN
+
+    def test_unparseable_returns_unknown(self) -> None:
+        assert epfl_internal_band("not-a-number") is EpflInternalBand.UNKNOWN
+
+    def test_value_outside_swiss_range_returns_unknown(self) -> None:
+        # 7.0/6 is impossible on the Swiss scale.
+        assert epfl_internal_band("7.0") is EpflInternalBand.UNKNOWN
+
+
+@pytest.mark.unit
 class TestVerdictDataclass:
     def test_frozen(self) -> None:
         import dataclasses
 
         v = ThresholdVerdict(
-            direction=ThresholdDirection.ABOVE,
-            gap=0.5,
-            confidence=0.9,
-            system=GradingSystem.US_4,
+            direction=ThresholdDirection.ABOVE, gap=0.5, confidence=0.9, system=GradingSystem.US_4
         )
         with pytest.raises(dataclasses.FrozenInstanceError):
             v.gap = 0.0  # type: ignore[misc]

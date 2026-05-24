@@ -253,11 +253,7 @@ def _is_word_boundary(text: str, start: int, end: int) -> bool:
 
 
 def _scan_and_add_matches(
-    text: str,
-    part: str,
-    score: float,
-    existing_spans: set[tuple[int, int]],
-    results: list[Any],
+    text: str, part: str, score: float, existing_spans: set[tuple[int, int]], results: list[Any]
 ) -> None:
     """Scan *text* for *part* and append new PERSON results for unseen spans."""
     pattern = re.compile(re.escape(part), re.IGNORECASE)
@@ -311,9 +307,7 @@ def _propagate_detected_names(text: str, results: list[Any]) -> list[Any]:
 
     new_results = list(results)
     for part in name_parts:
-        _scan_and_add_matches(
-            text, part, _PROPAGATED_SCORE, existing_spans, new_results,
-        )
+        _scan_and_add_matches(text, part, _PROPAGATED_SCORE, existing_spans, new_results)
 
     return new_results
 
@@ -624,10 +618,9 @@ def anonymize_dossiers(
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    mapping_table = pa.table({
-        "anonymized_path": list(path_mapping.keys()),
-        "original_path": list(path_mapping.values()),
-    })
+    mapping_table = pa.table(
+        {"anonymized_path": list(path_mapping.keys()), "original_path": list(path_mapping.values())}
+    )
     mapping_path = dst / "path_mapping.parquet"
     pq.write_table(mapping_table, mapping_path)
     logger.info("Path mapping written to {} ({} entries)", mapping_path, len(path_mapping))

@@ -145,9 +145,7 @@ _PARENTHETICAL_RE = re.compile(r"\s*\([^)]*\)\s*")
 _SECTION_TAIL_RE = re.compile(r"\s+(?:for|pour)\s+\w+.*$", re.IGNORECASE)
 # Numeric threshold token: either a slash form (with optional spaces) or
 # a percent form. Examples matched: "28/30", "3.5 / 4", "1.7/1", "80%".
-_THRESHOLD_TOKEN_RE = re.compile(
-    r"\b\d+(?:\.\d+)?\s*/\s*\d+(?:\.\d+)?\b|\b\d+(?:\.\d+)?\s*%",
-)
+_THRESHOLD_TOKEN_RE = re.compile(r"\b\d+(?:\.\d+)?\s*/\s*\d+(?:\.\d+)?\b|\b\d+(?:\.\d+)?\s*%")
 
 
 def parse_primary_threshold(raw: str) -> str:
@@ -261,15 +259,11 @@ def mine_profiles(parquet_path: Path = _PARQUET_PATH) -> dict[str, UniversityPro
         accepts = counts.get("accept", 0)
 
         threshold_counter = Counter(data["thresholds"])
-        primary_threshold = (
-            threshold_counter.most_common(1)[0][0] if threshold_counter else ""
-        )
+        primary_threshold = threshold_counter.most_common(1)[0][0] if threshold_counter else ""
 
         # Tier preference: most-common non-X, fall back to X.
         tier_counter = Counter(t for t in data["tiers_seen"] if t != "X")
-        primary_tier = (
-            tier_counter.most_common(1)[0][0] if tier_counter else "X"
-        )
+        primary_tier = tier_counter.most_common(1)[0][0] if tier_counter else "X"
 
         profiles[name] = UniversityProfile(
             name=name,
@@ -393,8 +387,11 @@ def load_university_profiles(
             updated.update({k: v for k, v in fields.items() if v is not None})
             profiles[name] = UniversityProfile.model_validate(updated)
         else:
-            # New university from board
-            profiles[name] = UniversityProfile(name=name, **fields)
+            # New university from board. The YAML loader hands us a
+            # ``dict[str, str]``; ``model_validate`` coerces each field
+            # to the typed UniversityProfile schema, unlike kwarg-splat
+            # which the type-checker refuses.
+            profiles[name] = UniversityProfile.model_validate({"name": name, **fields})
 
     if overrides:
         logger.info("Applied {} board overrides", len(overrides))
@@ -439,7 +436,9 @@ def find_profile_by_name(
         return None
 
     # Pre-build the normalized index once; small relative to load cost.
-    indexed = [(canonical, _normalize_school_name(canonical), p) for canonical, p in profiles.items()]
+    indexed = [
+        (canonical, _normalize_school_name(canonical), p) for canonical, p in profiles.items()
+    ]
 
     for _, norm_canon, profile in indexed:
         if norm_canon == normalized:

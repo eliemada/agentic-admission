@@ -127,7 +127,7 @@ function StatusDot({ status }: { readonly status: Status }) {
   return <span className={cls("candidate-status-dot", status)} />;
 }
 
-/* ─��� Candidate row ── */
+/* ── Candidate row ── */
 function CandidateRow({
   c,
   selected,

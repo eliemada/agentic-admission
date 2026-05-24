@@ -17,11 +17,7 @@ _ROLE_DISPLAY = {
     "chair": "Chair",
 }
 
-_DECISION_TO_STATUS = {
-    "accept": "admit",
-    "reject": "reject",
-    "waitlist": "discuss",
-}
+_DECISION_TO_STATUS = {"accept": "admit", "reject": "reject", "waitlist": "discuss"}
 
 _SEMESTER_RE = re.compile(r"^(\d{4}-\d{2}-(?:fall|spring|summer))")
 
@@ -54,10 +50,7 @@ def _parse_justifications(raw: dict | str) -> dict[str, dict[str, list[str]]]:
     result: dict[str, dict[str, list[str]]] = {}
     for dim, val in raw.items():
         if isinstance(val, dict) and ("pros" in val or "cons" in val):
-            result[dim] = {
-                "pros": list(val.get("pros", [])),
-                "cons": list(val.get("cons", [])),
-            }
+            result[dim] = {"pros": list(val.get("pros", [])), "cons": list(val.get("cons", []))}
         elif isinstance(val, str):
             result[dim] = {"pros": [val] if val else [], "cons": []}
         else:
@@ -202,15 +195,18 @@ def load_verdict(path: Path) -> dict | None:
         for db in raw_debates:
             entries = []
             for entry in db.get("entries", []):
-                entries.append({
-                    "role": _ROLE_DISPLAY.get(_parse_role(entry.get("role", "")), entry.get("role", "")),
-                    "round_number": entry.get("round_number", 0),
-                    "argument": entry.get("argument", ""),
-                })
-            parsed_debates.append({
-                "conflict_dimension": db.get("conflict_dimension", ""),
-                "entries": entries,
-            })
+                entries.append(
+                    {
+                        "role": _ROLE_DISPLAY.get(
+                            _parse_role(entry.get("role", "")), entry.get("role", "")
+                        ),
+                        "round_number": entry.get("round_number", 0),
+                        "argument": entry.get("argument", ""),
+                    }
+                )
+            parsed_debates.append(
+                {"conflict_dimension": db.get("conflict_dimension", ""), "entries": entries}
+            )
 
     return {
         "candidate_id": candidate_id,
@@ -261,6 +257,7 @@ def _load_parquet_index(parquet_path: Path) -> dict[str, dict[str, str]]:
 
     # Import matcher utilities
     import sys
+
     sys.path.insert(0, str(parquet_path.parent.parent / "src"))
     from agentic_admission.intake.matcher import name_to_folder_candidates, semester_from_record
 
@@ -349,10 +346,7 @@ def _build_name_index(anonymized_root: Path) -> dict[str, str]:
     return result
 
 
-def load_all_verdicts(
-    evaluations_dir: Path,
-    parquet_path: Path | None = None,
-) -> list[dict]:
+def load_all_verdicts(evaluations_dir: Path, parquet_path: Path | None = None) -> list[dict]:
     """Load all verdict JSONs from a directory, enriched with Parquet metadata.
 
     Parameters
