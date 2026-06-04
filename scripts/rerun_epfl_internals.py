@@ -30,14 +30,35 @@ from agentic_admission.curriculum.university_profiles import detect_epfl_interna
 # Hashes of the 28 EPFL-internals detected in the prior 5x run.
 _EPFL_HASHES: frozenset[str] = frozenset(
     {
-        "03f04df5270c", "04db248bd130", "16e8bbe0c623", "197a4a37be28",
-        "395d50e5cc7d", "3e6f13cc2a98", "40e9ebcdde2c", "4d85b1bfa647",
-        "5145dbcf0585", "5a65cc3ccc13", "6509240fe849", "6b91633db1da",
-        "7573473ad40c", "800d73d4404c", "82ddf06044ac", "8655be1be89d",
-        "8b296c88c36a", "8f5f3cc44828", "914281699b49", "99827b87624a",
-        "ab7146ae20e9", "b932dc01c73a", "c8a8e2176664", "ceeedf663cd8",
-        "d18ab8318eef", "d8a8b2b00d0b", "e3966f748a69", "f4c248134fc9",
-    },
+        "03f04df5270c",
+        "04db248bd130",
+        "16e8bbe0c623",
+        "197a4a37be28",
+        "395d50e5cc7d",
+        "3e6f13cc2a98",
+        "40e9ebcdde2c",
+        "4d85b1bfa647",
+        "5145dbcf0585",
+        "5a65cc3ccc13",
+        "6509240fe849",
+        "6b91633db1da",
+        "7573473ad40c",
+        "800d73d4404c",
+        "82ddf06044ac",
+        "8655be1be89d",
+        "8b296c88c36a",
+        "8f5f3cc44828",
+        "914281699b49",
+        "99827b87624a",
+        "ab7146ae20e9",
+        "b932dc01c73a",
+        "c8a8e2176664",
+        "ceeedf663cd8",
+        "d18ab8318eef",
+        "d8a8b2b00d0b",
+        "e3966f748a69",
+        "f4c248134fc9",
+    }
 )
 
 
@@ -45,7 +66,7 @@ async def _run_one(dossier, model: str, base_url: str, api_key: str, output_dir:
     """Evaluate one candidate and persist verdict JSON."""
     try:
         verdict, gpa = await evaluate_single(
-            dossier, model=model, base_url=base_url, api_key=api_key,
+            dossier, model=model, base_url=base_url, api_key=api_key
         )
         verdict_data = json.loads(verdict.model_dump_json())
         verdict_data["gpa"] = json.loads(gpa.model_dump_json())
@@ -53,7 +74,9 @@ async def _run_one(dossier, model: str, base_url: str, api_key: str, output_dir:
         out.write_text(json.dumps(verdict_data, indent=2), encoding="utf-8")
         logger.info(
             "Saved {} → {} (composite={:.2f})",
-            dossier.candidate_id, verdict.decision.value, verdict.composite_score,
+            dossier.candidate_id,
+            verdict.decision.value,
+            verdict.composite_score,
         )
     except Exception:
         logger.exception("Failed {}", dossier.candidate_id)
@@ -83,7 +106,7 @@ def main() -> None:
 
     # Load all Spring 2025-26 dossiers, filter to EPFL-internals.
     all_dossiers = load_all_anonymized_dossiers(
-        Path("data/processed/anonymized"), semester="2025-26-spring",
+        Path("data/processed/anonymized"), semester="2025-26-spring"
     )
     enriched = enrich_with_parquet(all_dossiers, Path("data/processed/all_candidates.parquet"))
 
@@ -97,7 +120,7 @@ def main() -> None:
                     "school_name": "Ecole polytechnique fédérale de Lausanne EPFL",
                     "is_epfl_internal": True,
                     "gpa_threshold": "4.0/6",
-                },
+                }
             )
             epfl_dossiers.append(forced)
 
@@ -106,9 +129,7 @@ def main() -> None:
     for i in range(1, args.n_runs + 1):
         out_dir = Path(f"{args.output_prefix}{i:02d}")
         logger.info("=== RUN {}/{} → {} ===", i, args.n_runs, out_dir)
-        asyncio.run(
-            _run_batch(epfl_dossiers, model, base_url, api_key, out_dir, args.concurrency),
-        )
+        asyncio.run(_run_batch(epfl_dossiers, model, base_url, api_key, out_dir, args.concurrency))
 
     logger.info("All {} runs complete", args.n_runs)
 

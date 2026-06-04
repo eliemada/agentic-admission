@@ -89,12 +89,7 @@ def _composite_variance(
         if len(scores) < 2:
             continue
         rows.append(
-            (
-                cid,
-                statistics.mean(scores),
-                statistics.stdev(scores),
-                max(scores) - min(scores),
-            )
+            (cid, statistics.mean(scores), statistics.stdev(scores), max(scores) - min(scores))
         )
     rows.sort(key=lambda r: r[2], reverse=True)
     return rows
@@ -116,8 +111,7 @@ def _per_dimension_variance(
 
 
 def _epfl_invariance(
-    per_candidate_minors: dict[str, list[str | None]],
-    epfl_internal_ids: set[str],
+    per_candidate_minors: dict[str, list[str | None]], epfl_internal_ids: set[str]
 ) -> tuple[int, int, list[str]]:
     """For EPFL-internal candidates, verify minor recommendation is constant."""
     if not epfl_internal_ids:
@@ -143,9 +137,7 @@ def _aggregate_counts_per_run(runs: list[dict[str, Verdict]]) -> list[Counter[st
 
 
 def _format_md(
-    runs: list[dict[str, Verdict]],
-    run_names: list[str],
-    epfl_internal_ids: set[str],
+    runs: list[dict[str, Verdict]], run_names: list[str], epfl_internal_ids: set[str]
 ) -> str:
     lines: list[str] = []
     lines.append("# Cohort Variance Report — 5x Spring 2025-26\n")

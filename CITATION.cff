@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use this work, please cite it as below."
+title: "Agentic Admission: A multi-agent LLM panel for MTE dossier evaluation at EPFL"
+abstract: >-
+  A decision-support system that emulates the EPFL Master in Management,
+  Technology and Entrepreneurship (MTE) admission committee using a panel of
+  four specialist LLM evaluators and a Chair. Calibrated against six years of
+  historical committee verdicts on 1,342 candidates (2020-2026). Reaches 82%
+  agreement with the committee on the 28 EPFL-internal candidates of Spring
+  2025-26 after a documented three-band GPA rule, with 5-run majority-vote
+  stability of 76.6% on the full 128-candidate cohort.
+authors:
+  - family-names: "Bruno"
+    given-names: "Elie"
+    affiliation: "EPFL — College of Management of Technology"
+type: software
+license: MIT
+version: "0.0.0"
+date-released: 2026-05-30
+keywords:
+  - "LLM-as-judge"
+  - "multi-agent deliberation"
+  - "admission decision support"
+  - "calibration"
+  - "anonymisation"
+  - "EPFL"
+  - "MTE"
+preferred-citation:
+  type: report
+  authors:
+    - family-names: "Bruno"
+      given-names: "Elie"
+  title: "Agentic Admission: A multi-agent LLM panel for MTE dossier evaluation at EPFL"
+  institution: "École polytechnique fédérale de Lausanne (EPFL), College of Management of Technology"
+  year: 2026
+  month: 5
+  notes: "Semester project; supervisor: Prof. Gaétan de Rassenfosse"
+  url: "https://github.com/eliemada/agentic-admission"

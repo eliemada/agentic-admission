@@ -47,10 +47,11 @@ class _CandidateRow:
     mean_composite: float
     stdev_composite: float
 
+
 # Hardcoded disambiguations for cases the heuristic matcher gets wrong.
 _NAME_OVERRIDES: dict[str, str] = {
     "Kim Seung Hyun": "26ae784d194a",  # Korean (Kongju National University)
-    "Kim Seyoung": "6509240fe849",      # EPFL Informatique bachelor
+    "Kim Seyoung": "6509240fe849",  # EPFL Informatique bachelor
     "Pacher-Theinburg Clemens Aurel Hugo": "76cc8938ce8f",
 }
 
@@ -175,10 +176,8 @@ def _format_md(
                 mode=mode,
                 agree_runs=agree_runs,
                 mean_composite=statistics.mean(composites),
-                stdev_composite=(
-                    statistics.stdev(composites) if len(composites) >= 2 else 0.0
-                ),
-            ),
+                stdev_composite=(statistics.stdev(composites) if len(composites) >= 2 else 0.0),
+            )
         )
 
     # --- Coverage ---
@@ -229,10 +228,7 @@ def _format_md(
     pct = 100.0 * full_agree / n if n else 0
     lines.append("## 4. Agreement (committee vs system mode)\n")
     lines.append(f"- Mode agrees with committee: **{full_agree}/{n}** ({pct:.1f}%)")
-    lines.append(
-        f"- Disagreements: **{n - full_agree}/{n}** "
-        f"({100 - pct:.1f}%)\n",
-    )
+    lines.append(f"- Disagreements: **{n - full_agree}/{n}** ({100 - pct:.1f}%)\n")
 
     # --- Disagreements grouped ---
     disagreements = [r for r in rows if r.committee != r.mode]
@@ -242,18 +238,14 @@ def _format_md(
 
     lines.append("## 5. Disagreement breakdown\n")
     for (com, sys), items in sorted(grouped.items(), key=lambda kv: -len(kv[1])):
-        lines.append(
-            f"### Committee = **{com}** | System mode = **{sys}** ({len(items)} cases)\n",
-        )
-        lines.append(
-            "| Name | Country | School | Mean comp | Stdev | Per-run decisions |",
-        )
+        lines.append(f"### Committee = **{com}** | System mode = **{sys}** ({len(items)} cases)\n")
+        lines.append("| Name | Country | School | Mean comp | Stdev | Per-run decisions |")
         lines.append("| --- | --- | --- | --- | --- | --- |")
         for r in sorted(items, key=lambda x: -x.mean_composite):
             decs = " · ".join(r.decisions)
             lines.append(
                 f"| {r.name} | {r.country} | {r.school} | "
-                f"{r.mean_composite:.2f} | {r.stdev_composite:.2f} | {decs} |",
+                f"{r.mean_composite:.2f} | {r.stdev_composite:.2f} | {decs} |"
             )
         lines.append("")
 
@@ -262,14 +254,14 @@ def _format_md(
     if near_8:
         lines.append("## 6. Disagreements near composite boundary (7.0 ≤ mean < 8.5)\n")
         lines.append(
-            f"_{len(near_8)} cases — these are the ones where seuil-tweaking might flip._\n",
+            f"_{len(near_8)} cases — these are the ones where seuil-tweaking might flip._\n"
         )
 
     # --- Footer ---
     lines.append("---\n")
     lines.append(
         f"_Generated from {n_runs} runs across {n} matched candidates of "
-        f"{len(candidates)} committee entries._",
+        f"{len(candidates)} committee entries._"
     )
     return "\n".join(lines)
 

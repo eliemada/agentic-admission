@@ -24,17 +24,38 @@ import openpyxl
 import pyarrow.parquet as pq
 
 _EPFL_HASHES: tuple[str, ...] = (
-    "03f04df5270c", "04db248bd130", "16e8bbe0c623", "197a4a37be28",
-    "395d50e5cc7d", "3e6f13cc2a98", "40e9ebcdde2c", "4d85b1bfa647",
-    "5145dbcf0585", "5a65cc3ccc13", "6509240fe849", "6b91633db1da",
-    "7573473ad40c", "800d73d4404c", "82ddf06044ac", "8655be1be89d",
-    "8b296c88c36a", "8f5f3cc44828", "914281699b49", "99827b87624a",
-    "ab7146ae20e9", "b932dc01c73a", "c8a8e2176664", "ceeedf663cd8",
-    "d18ab8318eef", "d8a8b2b00d0b", "e3966f748a69", "f4c248134fc9",
+    "03f04df5270c",
+    "04db248bd130",
+    "16e8bbe0c623",
+    "197a4a37be28",
+    "395d50e5cc7d",
+    "3e6f13cc2a98",
+    "40e9ebcdde2c",
+    "4d85b1bfa647",
+    "5145dbcf0585",
+    "5a65cc3ccc13",
+    "6509240fe849",
+    "6b91633db1da",
+    "7573473ad40c",
+    "800d73d4404c",
+    "82ddf06044ac",
+    "8655be1be89d",
+    "8b296c88c36a",
+    "8f5f3cc44828",
+    "914281699b49",
+    "99827b87624a",
+    "ab7146ae20e9",
+    "b932dc01c73a",
+    "c8a8e2176664",
+    "ceeedf663cd8",
+    "d18ab8318eef",
+    "d8a8b2b00d0b",
+    "e3966f748a69",
+    "f4c248134fc9",
 )
 
 _NAME_OVERRIDES: dict[str, str] = {
-    "Kim Seyoung": "6509240fe849",  # EPFL Informatique
+    "Kim Seyoung": "6509240fe849"  # EPFL Informatique
 }
 
 
@@ -111,14 +132,24 @@ def _load_runs(run_dirs: list[Path]) -> dict[str, _Stats]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--excel", type=Path, default=Path(
-        "/Users/eliebruno/Desktop/MTE admission commission 2nd round_Spring26.xlsx"))
-    p.add_argument("--pre-runs", nargs="+", type=Path,
-                   default=[Path(f"data/processed/runs/run{i:02d}") for i in range(1, 6)])
-    p.add_argument("--post-runs", nargs="+", type=Path,
-                   default=[Path(f"data/processed/runs_postfix/run{i:02d}") for i in range(1, 6)])
-    p.add_argument("--output", type=Path,
-                   default=Path("reports/epfl-internal-fix-before-after.md"))
+    p.add_argument(
+        "--excel",
+        type=Path,
+        default=Path("/Users/eliebruno/Desktop/MTE admission commission 2nd round_Spring26.xlsx"),
+    )
+    p.add_argument(
+        "--pre-runs",
+        nargs="+",
+        type=Path,
+        default=[Path(f"data/processed/runs/run{i:02d}") for i in range(1, 6)],
+    )
+    p.add_argument(
+        "--post-runs",
+        nargs="+",
+        type=Path,
+        default=[Path(f"data/processed/runs_postfix/run{i:02d}") for i in range(1, 6)],
+    )
+    p.add_argument("--output", type=Path, default=Path("reports/epfl-internal-fix-before-after.md"))
     args = p.parse_args()
 
     info = _build_hash_to_name(args.excel)
@@ -126,9 +157,11 @@ def main() -> None:
     post = _load_runs(args.post_runs)
 
     lines: list[str] = ["# EPFL-internal prompt fix: before vs after\n"]
-    lines.append("_28 EPFL-internal candidates from Spring 2025-26, 5 runs each, "
-                 "before vs after the prompt change clarifying that MTE applies the "
-                 "section-switcher 4.0 threshold (not 4.5)._\n")
+    lines.append(
+        "_28 EPFL-internal candidates from Spring 2025-26, 5 runs each, "
+        "before vs after the prompt change clarifying that MTE applies the "
+        "section-switcher 4.0 threshold (not 4.5)._\n"
+    )
 
     rows: list[tuple[str, str, str, str, float, float, str]] = []
     for h in _EPFL_HASHES:
@@ -139,8 +172,15 @@ def main() -> None:
         if not pre_s.decisions or not post_s.decisions:
             continue
         rows.append(
-            (h, name, committee, pre_s.mode, pre_s.mean_composite,
-             post_s.mean_composite, post_s.mode),
+            (
+                h,
+                name,
+                committee,
+                pre_s.mode,
+                pre_s.mean_composite,
+                post_s.mean_composite,
+                post_s.mode,
+            )
         )
 
     # Aggregates
@@ -153,21 +193,27 @@ def main() -> None:
     lines.append("## Aggregate counts on the 28 EPFL-internals\n")
     lines.append("| Source | accept | reject | waitlist | agree with committee |")
     lines.append("| --- | --- | --- | --- | --- |")
-    lines.append(f"| Committee | {committee_counts.get('accept', 0)} | "
-                 f"{committee_counts.get('reject', 0)} | 0 | — |")
-    lines.append(f"| System BEFORE (mode) | {pre_modes.get('accept', 0)} | "
-                 f"{pre_modes.get('reject', 0)} | {pre_modes.get('waitlist', 0)} | "
-                 f"**{pre_agree}/{len(rows)}** ({100*pre_agree/len(rows):.0f}%) |")
-    lines.append(f"| System AFTER (mode) | {post_modes.get('accept', 0)} | "
-                 f"{post_modes.get('reject', 0)} | {post_modes.get('waitlist', 0)} | "
-                 f"**{post_agree}/{len(rows)}** ({100*post_agree/len(rows):.0f}%) |")
+    lines.append(
+        f"| Committee | {committee_counts.get('accept', 0)} | "
+        f"{committee_counts.get('reject', 0)} | 0 | — |"
+    )
+    lines.append(
+        f"| System BEFORE (mode) | {pre_modes.get('accept', 0)} | "
+        f"{pre_modes.get('reject', 0)} | {pre_modes.get('waitlist', 0)} | "
+        f"**{pre_agree}/{len(rows)}** ({100 * pre_agree / len(rows):.0f}%) |"
+    )
+    lines.append(
+        f"| System AFTER (mode) | {post_modes.get('accept', 0)} | "
+        f"{post_modes.get('reject', 0)} | {post_modes.get('waitlist', 0)} | "
+        f"**{post_agree}/{len(rows)}** ({100 * post_agree / len(rows):.0f}%) |"
+    )
     lines.append("")
 
     lines.append("## Per-candidate before / after\n")
     lines.append("| Name | Committee | Before | Comp B | Comp A | After | Δcomp | Δdecision |")
     lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
     for _h, name, committee, pre_mode, pre_comp, post_comp, post_mode in sorted(
-        rows, key=lambda r: (r[2] != "accept", r[3], -r[5]),
+        rows, key=lambda r: (r[2] != "accept", r[3], -r[5])
     ):
         delta = post_comp - pre_comp
         flip = "→" if pre_mode == post_mode else "**FLIP**"
@@ -176,7 +222,7 @@ def main() -> None:
         lines.append(
             f"| {name} | {committee} | {pre_mode} {agree_pre} | "
             f"{pre_comp:.2f} | {post_comp:.2f} | {post_mode} {agree_post} | "
-            f"{delta:+.2f} | {flip} |",
+            f"{delta:+.2f} | {flip} |"
         )
     lines.append("")
 
