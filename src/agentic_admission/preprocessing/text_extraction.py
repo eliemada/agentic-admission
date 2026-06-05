@@ -24,10 +24,14 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from agentic_admission.config import settings
+
+if TYPE_CHECKING:
+    from docling.document_converter import DocumentConverter
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -131,7 +135,7 @@ def _write_markdown(text: str, output_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _build_api_converter() -> object:
+def _build_api_converter() -> DocumentConverter:
     """Build a Docling converter using a remote VLM via OpenAI-compatible API.
 
     Reads ``VLM_BASE_URL`` and ``VLM_MODEL_NAME`` from application settings.
@@ -165,7 +169,7 @@ def _build_api_converter() -> object:
     )
 
 
-def _build_local_converter() -> object:
+def _build_local_converter() -> DocumentConverter:
     """Build a Docling converter using Granite-Docling-258M locally.
 
     Returns
@@ -189,7 +193,7 @@ def _build_local_converter() -> object:
     )
 
 
-def _convert_pdf_with_ocr(pdf_path: Path, output_path: Path, converter: object) -> bool:
+def _convert_pdf_with_ocr(pdf_path: Path, output_path: Path, converter: DocumentConverter) -> bool:
     """Convert a single PDF to Markdown using a Docling VLM converter.
 
     Parameters
@@ -207,7 +211,7 @@ def _convert_pdf_with_ocr(pdf_path: Path, output_path: Path, converter: object) 
         True on success, False on failure.
     """
     try:
-        result = converter.convert(str(pdf_path))  # type: ignore[union-attr]
+        result = converter.convert(str(pdf_path))
         md_text = result.document.export_to_markdown()
         _write_markdown(md_text, output_path)
         return True

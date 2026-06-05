@@ -32,6 +32,10 @@ dependencies = [
   "openai>=1.60.0",
   "beautifulsoup4>=4.14.3",
   "pyyaml>=6.0.3",
+  # spacy.cli.download imports `typer` at module load; weasel 1.0 dropped it
+  # as a hard dep, so we pin it ourselves to keep presidio_analyzer (which
+  # imports spacy.nlp_engine) loadable.
+  "typer>=0.12.0",
 ]
 
 [project.scripts]

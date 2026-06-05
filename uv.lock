@@ -54,6 +54,7 @@ dependencies = [
     { name = "pymupdf" },
     { name = "pyyaml" },
     { name = "tenacity" },
+    { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "zeroentropy" },
 ]
@@ -94,6 +95,7 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.27.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "tenacity", specifier = ">=9.1.4" },
+    { name = "typer", specifier = ">=0.12.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
     { name = "zeroentropy", specifier = ">=0.1.0a11" },
 ]
