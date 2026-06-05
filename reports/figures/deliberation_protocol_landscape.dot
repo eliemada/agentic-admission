@@ -1,0 +1,200 @@
+// Landscape variant of deliberation_protocol.dot — for 16:9 slides.
+// Identical palette and topology to the original; rankdir=LR plus tight
+// spacing, shortened multi-line labels, and a single inline Dossier node
+// (no cluster) to pull the aspect ratio toward 2:1 for slide placement.
+//
+// Build:
+//   dot -Tpng deliberation_protocol_landscape.dot \
+//       -o deliberation_protocol_landscape.png
+
+digraph deliberation_protocol_landscape {
+    // ── Global ──────────────────────────────────────────────────────────
+    rankdir=LR
+    bgcolor="transparent"
+    fontname="Helvetica Neue"
+    pad=0.25
+    nodesep=0.25
+    ranksep=0.28
+    dpi=300
+    compound=true
+
+    node [
+        fontname="Helvetica Neue"
+        fontsize=9
+        style="filled"
+        color="#E5E5E5"
+        penwidth=0.8
+    ]
+    edge [
+        fontname="Helvetica Neue"
+        fontsize=8
+        color="#9CA3AF"
+        arrowsize=0.55
+        penwidth=0.8
+    ]
+
+    // ── Dossier (single inline node) ────────────────────────────────────
+    dossier [
+        label="Candidate Dossier\n────────────\nTranscript\nReference Letters\nMotivation Letter\nCV"
+        shape=note
+        style="filled"
+        fillcolor="#F3F4F6"
+        fontcolor="#374151"
+        color="#D1D5DB"
+        fontsize=8.5
+    ]
+
+    // ── Phase 1: Independent Evaluation ─────────────────────────────────
+    subgraph cluster_phase1 {
+        label="Phase 1 · Independent Evaluation"
+        labeljust=l
+        fontsize=9
+        fontcolor="#1E40AF"
+        style="rounded"
+        color="#BFDBFE"
+        bgcolor="#EFF6FF"
+        margin=8
+
+        node [
+            shape=box
+            style="filled,rounded"
+            fillcolor="#DBEAFE"
+            fontcolor="#1E40AF"
+            fontsize=9
+        ]
+        academic  [label="Academic\nEvaluator"]
+        reference [label="Reference\nEvaluator"]
+        motiveval [label="Motivation\nEvaluator"]
+        devil     [label="Devil's\nAdvocate"]
+    }
+
+    // ── Phase 2: Disagreement Detection ─────────────────────────────────
+    subgraph cluster_phase2 {
+        label="Phase 2 · Disagreement Detection"
+        labeljust=l
+        fontsize=9
+        fontcolor="#92400E"
+        style="rounded"
+        color="#FDE68A"
+        bgcolor="#FFFBEB"
+        margin=8
+
+        chair_detect [
+            label="Chair Agent\nscorecards →\nsemantic conflicts"
+            shape=box
+            style="filled,rounded"
+            fillcolor="#FEF3C7"
+            fontcolor="#92400E"
+            fontsize=9
+        ]
+    }
+
+    // ── Decision diamond ────────────────────────────────────────────────
+    conflict_check [
+        label="Conflicts?"
+        shape=diamond
+        fillcolor="#FEF3C7"
+        fontcolor="#92400E"
+        fontsize=8.5
+        width=0.85
+        height=0.55
+    ]
+
+    // ── Phase 3: Targeted Debate ────────────────────────────────────────
+    subgraph cluster_phase3 {
+        label="Phase 3 · Targeted Debate ⟨conditional⟩"
+        labeljust=l
+        fontsize=9
+        fontcolor="#7C3AED"
+        style="rounded"
+        color="#DDD6FE"
+        bgcolor="#FAF5FF"
+        margin=8
+
+        debate [
+            label="2-Round Debate\n────────────\nR1: present positions\nR2: rebut arguments"
+            shape=box
+            style="filled,rounded"
+            fillcolor="#EDE9FE"
+            fontcolor="#6B21A8"
+            fontsize=8.5
+        ]
+    }
+
+    // ── Phase 4: Final Synthesis ────────────────────────────────────────
+    subgraph cluster_phase4 {
+        label="Phase 4 · Final Synthesis"
+        labeljust=l
+        fontsize=9
+        fontcolor="#065F46"
+        style="rounded"
+        color="#A7F3D0"
+        bgcolor="#ECFDF5"
+        margin=8
+
+        chair_synth [
+            label="Chair Agent\nweighted synthesis\n→ verdict"
+            shape=box
+            style="filled,rounded"
+            fillcolor="#D1FAE5"
+            fontcolor="#065F46"
+            fontsize=9
+        ]
+    }
+
+    // ── Output ──────────────────────────────────────────────────────────
+    verdict [
+        label="PanelVerdict\n────────────\n8 scores (1-10)\nweighted composite\nACCEPT │ REJECT │ WAITLIST\njustification"
+        shape=box
+        style="filled,rounded,bold"
+        fillcolor="#FEE2E2"
+        fontcolor="#991B1B"
+        color="#FCA5A5"
+        fontsize=8.5
+        penwidth=1.2
+    ]
+
+    // ── LLM backend (side) ──────────────────────────────────────────────
+    llm [
+        label="LLM (vLLM / OpenAI-compat)\nJSON Schema · backoff · httpx"
+        shape=component
+        style="filled"
+        fillcolor="#F9FAFB"
+        fontcolor="#6B7280"
+        color="#D1D5DB"
+        fontsize=7.5
+    ]
+
+    // ── Edges ───────────────────────────────────────────────────────────
+
+    // Dossier → Phase 1
+    dossier -> academic
+    dossier -> reference
+    dossier -> motiveval
+    dossier -> devil
+
+    // Phase 1 → Phase 2 (scorecards)
+    academic  -> chair_detect [label=" AgentScorecard" fontcolor="#6B7280"]
+    reference -> chair_detect
+    motiveval -> chair_detect
+    devil     -> chair_detect
+
+    // Phase 2 → decision
+    chair_detect -> conflict_check
+
+    // Decision → Phase 3 or skip
+    conflict_check -> debate       [label=" yes" fontcolor="#7C3AED" color="#7C3AED"]
+    conflict_check -> chair_synth  [label=" skip debate " fontcolor="#9CA3AF" style=dashed]
+
+    // Phase 3 → Phase 4
+    debate -> chair_synth [label=" DebateTranscripts" fontcolor="#6B7280"]
+
+    // Phase 4 → Output
+    chair_synth -> verdict [label=" PanelVerdict" fontcolor="#991B1B" color="#FCA5A5" penwidth=1.2]
+
+    // LLM connections (dotted, non-constraining)
+    llm -> academic     [style=dotted color="#D1D5DB" arrowhead=none constraint=false]
+    llm -> chair_detect [style=dotted color="#D1D5DB" arrowhead=none constraint=false]
+    llm -> debate       [style=dotted color="#D1D5DB" arrowhead=none constraint=false]
+    llm -> chair_synth  [style=dotted color="#D1D5DB" arrowhead=none constraint=false]
+}
