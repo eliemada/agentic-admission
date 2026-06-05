@@ -30,7 +30,7 @@ from agentic_admission.config import settings
 async def _run_one(dossier, model, base_url, api_key, output_dir: Path) -> None:
     try:
         verdict, gpa = await evaluate_single(
-            dossier, model=model, base_url=base_url, api_key=api_key,
+            dossier, model=model, base_url=base_url, api_key=api_key
         )
         verdict_data = json.loads(verdict.model_dump_json())
         verdict_data["gpa"] = json.loads(gpa.model_dump_json())
@@ -38,7 +38,9 @@ async def _run_one(dossier, model, base_url, api_key, output_dir: Path) -> None:
         out.write_text(json.dumps(verdict_data, indent=2), encoding="utf-8")
         logger.info(
             "Saved {} → {} (composite={:.2f})",
-            dossier.candidate_id, verdict.decision.value, verdict.composite_score,
+            dossier.candidate_id,
+            verdict.decision.value,
+            verdict.composite_score,
         )
     except Exception:
         logger.exception("Failed {}", dossier.candidate_id)
@@ -63,14 +65,15 @@ def main() -> None:
     args = p.parse_args()
 
     all_dossiers = load_all_anonymized_dossiers(
-        Path("data/processed/anonymized"), semester=args.semester,
+        Path("data/processed/anonymized"), semester=args.semester
     )
     enriched = enrich_with_parquet(all_dossiers, Path("data/processed/all_candidates.parquet"))
 
     matched = [d for d in enriched if (d.decision_final or "").strip()]
     logger.info(
         "Filtered: {} matched dossiers (with committee decision) out of {}",
-        len(matched), len(enriched),
+        len(matched),
+        len(enriched),
     )
 
     asyncio.run(
@@ -81,7 +84,7 @@ def main() -> None:
             settings.openrouter_api_key,
             args.output_dir,
             args.concurrency,
-        ),
+        )
     )
     logger.info("Done. Verdicts saved to {}", args.output_dir)
 

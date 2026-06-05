@@ -70,12 +70,7 @@ def _split_candidate_id(stem: str) -> tuple[str, str] | None:
 
 
 async def _backfill_one(
-    *,
-    verdict_path: Path,
-    model: str,
-    base_url: str,
-    api_key: str,
-    dry_run: bool,
+    *, verdict_path: Path, model: str, base_url: str, api_key: str, dry_run: bool
 ) -> bool:
     """Re-run ``recommend_minor`` for one verdict and patch the file.
 
@@ -90,7 +85,9 @@ async def _backfill_one(
 
     candidate_dir = _ANON_ROOT / semester / folder
     if not candidate_dir.is_dir():
-        logger.warning("No anonymized dossier for {} (looked in {})", verdict_path.stem, candidate_dir)
+        logger.warning(
+            "No anonymized dossier for {} (looked in {})", verdict_path.stem, candidate_dir
+        )
         return False
 
     dossier = load_anonymized_dossier(candidate_dir, semester)
@@ -134,9 +131,7 @@ async def _backfill_one(
 
     verdict = json.loads(verdict_path.read_text(encoding="utf-8"))
     verdict["minor_recommendation"] = payload
-    verdict_path.write_text(
-        json.dumps(verdict, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    verdict_path.write_text(json.dumps(verdict, indent=2, ensure_ascii=False), encoding="utf-8")
     return True
 
 
@@ -156,18 +151,16 @@ async def _run(
         logger.info("No verdicts need backfill (semester filter: {})", semester)
         return (0, 0)
 
-    logger.info("Backfilling {} verdicts (dry_run={}, concurrency={})", len(targets), dry_run, concurrency)
+    logger.info(
+        "Backfilling {} verdicts (dry_run={}, concurrency={})", len(targets), dry_run, concurrency
+    )
 
     semaphore = asyncio.Semaphore(concurrency)
 
     async def _bounded(path: Path) -> bool:
         async with semaphore:
             return await _backfill_one(
-                verdict_path=path,
-                model=model,
-                base_url=base_url,
-                api_key=api_key,
-                dry_run=dry_run,
+                verdict_path=path, model=model, base_url=base_url, api_key=api_key, dry_run=dry_run
             )
 
     results = await asyncio.gather(*(_bounded(p) for p in targets))
@@ -183,7 +176,9 @@ def main() -> None:
     parser.add_argument("--base-url", type=str, default=None)
     parser.add_argument("--api-key", type=str, default=None)
     parser.add_argument("--concurrency", type=int, default=4)
-    parser.add_argument("--dry-run", action="store_true", help="Print recommendations without writing files")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print recommendations without writing files"
+    )
     args = parser.parse_args()
 
     logger.remove()
