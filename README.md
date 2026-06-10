@@ -65,7 +65,7 @@ This is a research project first. The system is the answer; the path is the cont
 |---|---|---|---|
 | **1. Survey** | Read the LLM-as-judge literature (MT-Bench, AlpacaEval, JudgeBench). Walked through past committee decisions with the supervisor. | Zero-shot LLM judgement drifts in domain-specific ways; we will need a calibration loop. | [`reports/semaine-01.typ`](reports/) |
 | **2. Data archaeology** | Took six years of inconsistent committee Excel exports (2020–2026), normalised them into a single Parquet of 1,342 candidates. | Schema drifts every year; fuzzy header matching and multi-row grouping are necessary. | [`extraction/pipeline.py`](src/agentic_admission/extraction/pipeline.py) (523 LOC) |
-| **3. Anonymisation** | Cleaned 12,529 dossier documents (transcripts, letters, CVs, certificates) with Presidio + GLiNER. Audited a 900-file stratified sample. | A custom name-propagation step is needed to catch ALL-CAPS names that GLiNER misses; passport pages need to be stripped before text extraction. | [`anonymizer/`](src/agentic_admission/anonymizer/) ([`anonymization-audit.pdf`](docs/anonymization-audit.pdf)) |
+| **3. Anonymisation** | Cleaned 12,529 dossier documents (transcripts, letters, CVs, certificates) with Presidio + GLiNER. Audited a 900-file stratified sample. | A custom name-propagation step is needed to catch ALL-CAPS names that GLiNER misses; passport pages need to be stripped before text extraction. | [`anonymizer/`](src/agentic_admission/anonymizer/) ([`anonymization-audit.pdf`](reports/anonymization-audit.pdf)) |
 | **4. Architecture** | Designed a four-evaluator + Chair panel under structured JSON outputs. Spec-first in [`docs/plans/multi-agent-deliberation-design.md`](docs/plans/). | Specialist separation gives audit handles: when system disagrees with committee, you can read four scorecards side-by-side. | [`agents/`](src/agentic_admission/agents/) |
 | **5. First calibration** | Ran on Spring 2025–26, measured 50% agreement on EPFL-internals. | We need a falsification event, not a tuning loop. | [`reports/committee-vs-system-2026-05-11.md`](reports/) |
 | **6. The Maillard case** | Five of eight EPFL-internal rejects had algebra+analysis avg in [4.0, 4.5]. The committee admitted them on the **recovery trajectory** that a binary threshold cannot see. | The system's rule was simpler than the committee's. Email Géraldine (former chair). | [`docs/plans/epfl-internal-branch.md`](docs/plans/) |
@@ -282,7 +282,7 @@ uv run poe dashboard-dev    # Vite dev server with hot reload
 |---|---|
 | `lint` | All pre-commit hooks (ruff check, ruff format, ty, …) |
 | `typecheck` | `ty check src` |
-| `test` | pytest with coverage (fails under 40%) |
+| `test` | pytest with coverage (fails under 55%) |
 | `extract` | Excel files → `data/processed/all_candidates.parquet` |
 | `eda` / `dossier-eda` | Open Marimo notebooks for exploratory analysis |
 | `ingest` | Ingest dossier ZIP/TAR/dir into staging |
@@ -319,11 +319,12 @@ agentic-admission/
 ├── slurm/                        # SCITAS HPC job scripts
 ├── docs/
 │   ├── plans/                    # 8 spec-first design documents
-│   ├── architecture-design.pdf   # System architecture (one-pager)
-│   ├── anonymization-audit.pdf   # 900-file stratified audit
 │   └── unofficial-guidelines.md  # Reverse-engineered committee rules
 ├── reports/
 │   ├── final_report.{typ,pdf}    # Final project report (this PDF)
+│   ├── references.bib            # Report bibliography
+│   ├── anonymization-audit.{typ,pdf} # 900-file stratified audit
+│   ├── architecture-design.pdf   # System architecture (one-pager)
 │   ├── semaine-{01..14}.{typ,pdf}# 14 weekly reports
 │   └── *.md                      # Calibration analyses (committee vs. system)
 ├── notebooks/                    # Marimo notebooks (eda, dossier_eda, …)
@@ -352,12 +353,6 @@ The engineering posture exists in service of the academic claim: **a research co
 
 [`.github/workflows/test.yml`](.github/workflows/test.yml) runs **lint → typecheck → test** on every push to `main` and on every PR.
 
-### A lesson worth carrying
-
-> `--exitfirst` is a developer-experience flag, not a CI flag. The CI must run the full suite even when an early failure looks conclusive. The cost of a missing test failure is paid weeks later when an unrelated change touches the dead code.
-
-This was learned the hard way during the week-11 `AgentScorecard` schema migration, where 28 tests failed silently because `--exitfirst` stopped on the first schema error and reported only that one. Week 14 paid the debt: fixture helpers were centralised in `tests/conftest.py` and a CI step that runs `pytest -ra --tb=no` without `--exitfirst` was added.
-
 ---
 
 ## 📚 Reports & artefacts
@@ -366,8 +361,8 @@ This was learned the hard way during the week-11 `AgentScorecard` schema migrati
 |---|---|
 | [`reports/final_report.pdf`](reports/final_report.pdf) | **The full project report** — 11 sections, 3 appendices, EPFL formatting |
 | [`reports/semaine-01.pdf`](reports/) … [`semaine-14.pdf`](reports/) | 14 weekly reports tracing the path from question to system |
-| [`docs/architecture-design.pdf`](docs/architecture-design.pdf) | One-page architectural overview |
-| [`docs/anonymization-audit.pdf`](docs/anonymization-audit.pdf) | 900-file stratified audit (50 × 18 doc types, seed 42) |
+| [`reports/architecture-design.pdf`](reports/) | One-page architectural overview |
+| [`reports/anonymization-audit.pdf`](reports/anonymization-audit.pdf) | 900-file stratified audit (50 × 18 doc types, seed 42) |
 | [`docs/plans/`](docs/plans/) | 8 spec-first design documents |
 | [`reports/committee-vs-system-policy-v2.md`](reports/) | Raw calibration analysis underlying §7 of the final report |
 | [`reports/epfl-internal-fix*.md`](reports/) | Before/after diffs for the three EPFL-internal iterations |
