@@ -1,0 +1,33 @@
+src/agentic_admission/agents/epfl_minor_map.py
+  s_6e6c7bb2e86652::t_94d93fd012a7db 121
+src/agentic_admission/models/minor.py
+  s_6e6c7bb2e86652::t_a8a3d10c1d38b5 236-254,263-275,279-281,283,289
+src/agentic_admission/agents/minor_advisor.py
+  s_6e6c7bb2e86652::t_d9fe00e61255ba 231-235,237,239-241,245,247
+  s_6e6c7bb2e86652::t_25fc82b3f927f1 47
+  s_6e6c7bb2e86652::t_2d696287a855b9 22
+  s_6e6c7bb2e86652::t_cc7cd6ae137898 70
+  s_6e6c7bb2e86652::t_8f39a8483265eb 30,33-36
+tests/test_minor.py
+  s_6e6c7bb2e86652::t_a78278cf56592c 1-70
+tests/test_epfl_minor_map.py
+  s_6e6c7bb2e86652::t_8653e46db7d5ef 266-267,301-343
+  s_6e6c7bb2e86652::t_31940461618029 56-65
+  s_6e6c7bb2e86652::t_86a4e1f0cd444c 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "7fdf5ebdad1115c151889c14ecbc8e414c98b381",
+  "prompts": {},
+  "sessions": {
+    "s_6e6c7bb2e86652": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "265e7267-c8f4-47d5-bc2b-88aeefb8fbae",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Elie BRUNO <contact@eliebruno.com>"
+    }
+  }
+}
