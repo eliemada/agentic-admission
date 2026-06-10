@@ -12,7 +12,7 @@ from agentic_admission.agents.epfl_minor_map import (
     build_deterministic_recommendation,
     detect_epfl_bachelor,
 )
-from agentic_admission.models.minor import ALL_MINORS, get_minor_by_name
+from agentic_admission.models.minor import ALL_MINORS, get_minor_by_name, is_non_recommendable_minor
 
 
 def _make_async_none() -> Callable[..., Coroutine[Any, Any, None]]:
@@ -51,6 +51,16 @@ class TestMappingTable:
             for name in minors:
                 assert "Management, Technology and Entrepreneurship" not in name, (
                     f"Mapping for {bachelor!r} should not include MTE master minor"
+                )
+
+    def test_no_recommendation_includes_non_recommendable_minor(self) -> None:
+        # The deterministic table bypasses the advisor's safety-net filter,
+        # so it must never propose a non-recommendable minor (the MTE master
+        # mirror minor or Financial Engineering) on its own.
+        for bachelor, (_section, minors) in EPFL_BACHELOR_TO_MINORS.items():
+            for name in minors:
+                assert not is_non_recommendable_minor(name), (
+                    f"Mapping for {bachelor!r} proposes non-recommendable minor {name!r}"
                 )
 
     def test_table_is_immutable(self) -> None:
@@ -253,8 +263,8 @@ class TestRecommendMinorShortCircuit:
         async def _fake_complete(*_args: object, **_kwargs: object) -> MinorAdvisorResponse:
             called.append(True)
             return MinorAdvisorResponse(
-                minor_1_name="Financial Engineering",
-                minor_1_section="IF",
+                minor_1_name="Computer Science",
+                minor_1_section="IN",
                 minor_1_score=7,
                 minor_1_reason="ext",
                 minor_2_name="Systems Engineering",
@@ -288,4 +298,46 @@ class TestRecommendMinorShortCircuit:
         )
 
         assert called, "LLM should run for external candidates regardless of dossier text"
-        assert result.primary_minor == "Financial Engineering"
+        assert result.primary_minor == "Computer Science"
+
+    @pytest.mark.asyncio
+    async def test_financial_engineering_dropped_from_llm_output(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Financial Engineering is non-recommendable (same committee as the
+        # MTE master). If the LLM proposes it anyway it must be filtered out
+        # and never surface as the primary recommendation.
+        from agentic_admission.agents import minor_advisor
+        from agentic_admission.agents.minor_advisor import MinorAdvisorResponse
+
+        async def _fake_complete(*_args: object, **_kwargs: object) -> MinorAdvisorResponse:
+            return MinorAdvisorResponse(
+                minor_1_name="Financial Engineering",
+                minor_1_section="IF",
+                minor_1_score=9,
+                minor_1_reason="llm ignored exclusion",
+                minor_2_name="Systems Engineering",
+                minor_2_section="MTE",
+                minor_2_score=7,
+                minor_2_reason="ext",
+                minor_3_name="Statistics",
+                minor_3_section="MA",
+                minor_3_score=5,
+                minor_3_reason="ext",
+            )
+
+        monkeypatch.setattr(minor_advisor, "complete", _fake_complete)
+        monkeypatch.setattr(minor_advisor, "_try_curriculum_match", _make_async_none())
+
+        result = await minor_advisor.recommend_minor(
+            transcript_text="(transcript)",
+            cv_text="(cv)",
+            model="ignored",
+            base_url="ignored",
+            is_epfl_internal=False,
+            full_dossier_text="No EPFL marker here.",
+        )
+
+        names = [s.minor_name for s in result.recommended]
+        assert "Financial Engineering" not in names
+        assert result.primary_minor == "Systems Engineering"
