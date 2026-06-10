@@ -1,0 +1,21 @@
+reports/final_report.typ
+  s_b8a018cc37b5db::t_3ee990d6eae0b3 527-531
+reports/final_report.pdf
+  s_b8a018cc37b5db::t_039ce90f5e8cdb 618,10745,10755,10766,10776,10796,10806,10816,10826,10836,10846,10856,10866,10876,10890,10901,10911,10952,19860,19868,19884,20108,21555,21589,21593-21617,22684,22777-24661,24667,24670
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "25dcf75e0aabfd498c5824e093c5f889179cf8ab",
+  "prompts": {},
+  "sessions": {
+    "s_b8a018cc37b5db": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e200dae8-0db8-4e8f-89b1-8d96853315a7",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Elie BRUNO <contact@eliebruno.com>"
+    }
+  }
+}
