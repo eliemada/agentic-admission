@@ -1,0 +1,37 @@
+reports/references.bib
+  s_b8a018cc37b5db::t_13067c5a48e8b4 1-123
+reports/final_report.typ
+  s_b8a018cc37b5db::t_9c766e8315e113 179-182
+  s_b8a018cc37b5db::t_337616cd38ff3d 186,188-190
+  s_b8a018cc37b5db::t_63a5d0123ad0ae 761-763
+  s_b8a018cc37b5db::t_3cff5f5247202a 845-847
+  s_b8a018cc37b5db::t_13cfc88fff335f 538-542
+  s_b8a018cc37b5db::t_36c5f00eaeca37 870-871
+  s_b8a018cc37b5db::t_4edbe0261b4aa4 127
+  s_b8a018cc37b5db::t_dcca6dc397fb2d 159-160
+  s_b8a018cc37b5db::t_292bb5712fbb3f 556
+  s_b8a018cc37b5db::t_18591c04a8b407 796-800
+  s_b8a018cc37b5db::t_984928a11b3541 774-787
+  s_b8a018cc37b5db::t_3535d4203fb9a9 391
+  s_b8a018cc37b5db::t_d929826a9330e2 1217-1223
+  s_b8a018cc37b5db::t_ded60e286f761d 290-291
+  s_b8a018cc37b5db::t_712fc315f3a7df 194-224
+  s_b8a018cc37b5db::t_81f02133d9d3a9 1202
+  s_b8a018cc37b5db::t_0f43fec162d870 499-534
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "9c4927520d330a9175788a892bc45ab98546a745",
+  "prompts": {},
+  "sessions": {
+    "s_b8a018cc37b5db": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e200dae8-0db8-4e8f-89b1-8d96853315a7",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Elie BRUNO <contact@eliebruno.com>"
+    }
+  }
+}
