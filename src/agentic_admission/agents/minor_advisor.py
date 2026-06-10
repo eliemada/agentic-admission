@@ -19,7 +19,7 @@ from agentic_admission.agents.epfl_minor_map import (
 from agentic_admission.agents.llm_client import ChatMessage, complete
 from agentic_admission.curriculum.match_models import CurriculumMatchReport
 from agentic_admission.models.evaluation import MinorRecommendation, MinorScore
-from agentic_admission.models.minor import format_minor_list, is_mte_master_minor
+from agentic_admission.models.minor import format_minor_list, is_non_recommendable_minor
 
 if TYPE_CHECKING:
     import httpx
@@ -27,12 +27,13 @@ if TYPE_CHECKING:
     from agentic_admission.curriculum.models import Curriculum
 
 
-_MTE_MASTER_EXCLUSION = (
+_NON_RECOMMENDABLE_EXCLUSION = (
     "- The candidate is being admitted to the MTE master "
     "(Management, Technology and Entrepreneurship). NEVER recommend the "
-    '"Management, Technology and Entrepreneurship" minor — a student '
-    "cannot take their own master program as a minor. The Available "
-    "Minors list below already excludes it.\n"
+    '"Management, Technology and Entrepreneurship" minor nor the '
+    '"Financial Engineering" minor — both are run by the same committee and '
+    "each is its own dedicated master, so neither can be taken as a minor by "
+    "an MTE admit. The Available Minors list below already excludes them.\n"
 )
 
 
@@ -43,7 +44,7 @@ _MINOR_ADVISOR_PROMPT = (
     "disciplinary minor best fits their academic background.\n\n"
     "RULES:\n"
     "- Recommend exactly 3 minors, ranked by fit (best first).\n"
-    + _MTE_MASTER_EXCLUSION
+    + _NON_RECOMMENDABLE_EXCLUSION
     + "- Use the curriculum match report as your PRIMARY evidence — it shows "
     "which EPFL courses the candidate's background covers and where the gaps "
     "are.\n"
@@ -66,7 +67,7 @@ _MINOR_ADVISOR_PROMPT_BASIC = (
     "disciplinary minor best fits their academic background and coursework.\n\n"
     "RULES:\n"
     "- Recommend exactly 3 minors, ranked by fit (best first).\n"
-    + _MTE_MASTER_EXCLUSION
+    + _NON_RECOMMENDABLE_EXCLUSION
     + "- Base your recommendation primarily on courses taken and skills "
     "demonstrated in the transcript.\n"
     "- The CV provides secondary context (work experience, projects, "
@@ -227,20 +228,23 @@ async def recommend_minor(
         ),
     )
 
-    # Safety net: drop the MTE master mirror minor if the LLM still
-    # recommends it. Returns at most 2 in that case rather than promote
-    # a hallucinated 4th option.
-    recommended = tuple(s for s in raw_recommended if not is_mte_master_minor(s.minor_name))
+    # Safety net: drop any non-recommendable minor (the MTE master mirror
+    # minor or Financial Engineering) if the LLM still recommends it.
+    # Returns fewer than 3 in that case rather than promote a hallucinated
+    # replacement.
+    recommended = tuple(s for s in raw_recommended if not is_non_recommendable_minor(s.minor_name))
     if len(recommended) < len(raw_recommended):
-        dropped = [s.minor_name for s in raw_recommended if is_mte_master_minor(s.minor_name)]
+        dropped = [s.minor_name for s in raw_recommended if is_non_recommendable_minor(s.minor_name)]
         logger.warning(
-            "Dropped MTE master minor from recommendations (LLM ignored exclusion): {}", dropped
+            "Dropped non-recommendable minor(s) from recommendations "
+            "(LLM ignored exclusion): {}",
+            dropped,
         )
 
     if not recommended:
-        # Defensive: should never happen because we exclude MTE from the
+        # Defensive: should never happen because we exclude these from the
         # input list and ask for 3, but lock the contract anyway.
-        msg = "Minor advisor returned only the MTE master minor — empty after filter"
+        msg = "Minor advisor returned only non-recommendable minors — empty after filter"
         raise RuntimeError(msg)
 
     primary = recommended[0].minor_name

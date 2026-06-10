@@ -231,11 +231,26 @@ def get_minor_by_name(name: str) -> Minor | None:
 
 
 # Name of the minor that mirrors the MTE master program itself.
-#
-# A candidate admitted to the MTE master cannot take this minor -- it is
-# the master's own curriculum re-packaged as a minor for OTHER programs'
-# students. The minor advisor must filter it out.
 _MTE_MASTER_MINOR_NAME: str = "Management, Technology and Entrepreneurship"
+
+# Minors the panel must never recommend to an MTE admit.
+#
+# Both programs are run by the same committee (the College of Management of
+# Technology) and each corresponds to its own dedicated master, so neither is
+# a valid minor for a candidate already being admitted to MTE:
+#   * "Management, Technology and Entrepreneurship" — the MTE master's own
+#     curriculum re-packaged as a minor for OTHER programs' students.
+#   * "Financial Engineering" — corresponds to the dedicated Master in
+#     Financial Engineering; excluded per committee decision.
+# The minor advisor and the deterministic mapping must filter these out. They
+# stay in ``ALL_MINORS`` so historical transcripts that mention them still
+# resolve via ``get_minor_by_name``.
+_NON_RECOMMENDABLE_MINOR_NAMES: frozenset[str] = frozenset(
+    {
+        _MTE_MASTER_MINOR_NAME,
+        "Financial Engineering",
+    },
+)
 
 
 def is_mte_master_minor(minor_name: str) -> bool:
@@ -245,19 +260,33 @@ def is_mte_master_minor(minor_name: str) -> bool:
     return minor_name.strip().lower() == _MTE_MASTER_MINOR_NAME.lower()
 
 
+def is_non_recommendable_minor(minor_name: str) -> bool:
+    """Return True when ``minor_name`` must never be recommended.
+
+    Covers every name in :data:`_NON_RECOMMENDABLE_MINOR_NAMES` (the MTE
+    master's mirror minor and Financial Engineering), matched
+    case-insensitively after stripping surrounding whitespace.
+    """
+    if not minor_name:
+        return False
+    normalized = minor_name.strip().lower()
+    return any(normalized == name.lower() for name in _NON_RECOMMENDABLE_MINOR_NAMES)
+
+
 def selectable_minors() -> tuple[Minor, ...]:
     """Return the minors a candidate can be assigned to.
 
-    Excludes :data:`_MTE_MASTER_MINOR_NAME` because the candidate is being
-    admitted to that master — they cannot also pick it as their minor.
+    Excludes every name in :data:`_NON_RECOMMENDABLE_MINOR_NAMES`: the
+    candidate is being admitted under the same committee, so those programs
+    cannot also be picked as their minor.
     """
-    return tuple(m for m in ALL_MINORS if not is_mte_master_minor(m.name))
+    return tuple(m for m in ALL_MINORS if not is_non_recommendable_minor(m.name))
 
 
 def format_minor_list() -> str:
     """Format selectable minors as a numbered markdown list for LLM context.
 
-    The MTE master's mirror minor is excluded — see :func:`selectable_minors`.
+    Non-recommendable minors are excluded — see :func:`selectable_minors`.
     """
     lines: list[str] = []
     for i, m in enumerate(selectable_minors(), 1):

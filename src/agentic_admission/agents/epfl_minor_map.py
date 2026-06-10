@@ -118,7 +118,7 @@ _EPFL_BACHELOR_TO_MINORS_RAW: dict[str, tuple[str, tuple[str, str, str]]] = {
     ),
     "Sciences humaines et sociales": (
         "SHS",
-        ("Digital Humanities, Media and Society", "Systems Engineering", "Financial Engineering"),
+        ("Digital Humanities, Media and Society", "Systems Engineering", "Data Science"),
     ),
 }
 
