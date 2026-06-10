@@ -1,0 +1,28 @@
+README.md
+  s_b8a018cc37b5db::t_f479500b50277b 68
+  s_b8a018cc37b5db::t_1c7e5f5c1b8672 285
+  s_b8a018cc37b5db::t_72b55fbcdbd86e 325-327
+  s_b8a018cc37b5db::t_33061af339bc4a 364-365
+reports/anonymization-audit.pdf
+  s_b8a018cc37b5db::t_381557a6b9d944 1-5712
+reports/final_report.pdf
+  s_b8a018cc37b5db::t_381557a6b9d944 1-24669
+.gitignore
+  s_b8a018cc37b5db::t_c5116bc6e2eec2 8-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "2445173bd738618f43f64e27b8366ba312e03195",
+  "prompts": {},
+  "sessions": {
+    "s_b8a018cc37b5db": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e200dae8-0db8-4e8f-89b1-8d96853315a7",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Elie BRUNO <contact@eliebruno.com>"
+    }
+  }
+}
