@@ -124,7 +124,7 @@ This report describes four contributions:
   iterative prompt fixes that moved EPFL-internal agreement from
   50% to 82% in three weeks (Sections 6 and 7).
 
-+ A *spec-first engineering posture* with TDD, type checking, ruff
++ A *spec-first engineering posture* with type checking, ruff
   `ALL`, atomic PRs, and a public changelog of 14 weekly reports.
   Every architectural change is traceable to a design document and a
   PR (Section 5).
@@ -156,7 +156,8 @@ edge cases like the EPFL-internal three-band rule (Section 6).
 None of this means the LLM is calibrated. The literature on
 LLM-as-judge is consistent on one point: zero-shot judgements drift
 from human judgements in ways that depend on the model, the prompt,
-the domain, and the ground-truth source. The remedy is to measure
+the domain, and the ground-truth source
+@zheng2023judging @gu2024survey. The remedy is to measure
 that drift on the target task and then design either the prompt, the
 rubric, or the aggregation to close the gap. That measure-and-close
 loop is the spine of this project.
@@ -175,28 +176,52 @@ This is a classical separation-of-concerns argument applied to a
 prompt design. The benefit shows up in audit: when the system
 disagrees with the committee, we can read the four specialist
 scorecards side by side and ask which one is wrong. A single-agent
-score gives no such handle.
+score gives no such handle. Verga et al. report that a jury drawn
+from several model families beats a single larger judge
+@verga2024poll; our four personas share one model, a limitation the
+threats list in Section 6 carries as an open item.
 
 == Calibration against a noisy panel
 
-The committee is the ground truth and the committee is noisy. The
+The committee is the ground truth and the committee is noisy: the
 same dossier read by a different pair of committee members on a
-different day can produce a different verdict. We do not have
-inter-rater data on the committee, so we treat the recorded decision
-as a point estimate and we accept that agreement above 80% on
-sub-cohorts where the rule is clear (EPFL-internals after the band
-rule, Section 7) is the most we should expect.
+different day can produce a different verdict. Section 6 treats each
+recorded decision as a point estimate and derives the ceiling that
+noise puts on any agreement number.
 
 == Related work
 
-The closest prior systems we found are LLM-as-judge frameworks
-(MT-Bench, AlpacaEval, JudgeBench) that benchmark model responses
-against reference answers; admission-AI prototypes from US graduate
-programmes that focus on resume parsing rather than holistic review;
-and the broader literature on algorithmic fairness in admissions,
-which is the reason we treat the system as decision-support and not
-decision-making. Section 6 returns to the design choices that follow
-from that posture.
+The closest prior systems fall into three groups. First, the
+LLM-as-judge frameworks: MT-Bench @zheng2023judging, AlpacaEval
+@alpacaeval, and JudgeBench @tan2024judgebench benchmark model
+responses against reference answers. The biases this literature
+documents in LLM judges (verbosity @saito2023verbosity, position
+@wang2023fair, and the wider taxonomy in @ye2024justice) apply to
+any system that scores free-form text; Section 6 carries the ones
+we have not yet measured as threats.
+
+Second, admission systems trained on committee history. GRADE
+@waters2014grade predicted graduate-admission verdicts at UT Austin
+from past committee decisions and was retired in 2020 after public
+criticism that a model calibrated on historical decisions reproduces
+historical bias. The criticism transfers to this project unchanged,
+and it is the reason the bias audit ranks first among the open items
+in Section 8.
+
+Third, multi-agent deliberation. Debate between LLM agents improves
+factuality on reasoning benchmarks @du2023debate, and it also
+degenerates: Liang et al. observe agents converging on their first
+answers instead of producing new arguments @liang2023debate. Our
+debate phase is conditional (it runs only on detected conflicts) and
+bounded at two rounds. The 5-run majority vote of Section 6 is
+self-consistency @wang2022selfconsistency applied to a three-way
+classification.
+
+The regulatory frame is the EU AI Act, which classifies systems that
+determine access to education as high-risk @euaiact2024. The
+fairness literature and the Act point the same way: we treat the
+system as decision-support and not decision-making. Section 6
+returns to the design choices that follow from that posture.
 
 // =============================================================================
 //  3. Data and anonymisation
@@ -262,7 +287,8 @@ Excels again.
 Dossier documents arrive with full PII: names, emails, phone numbers,
 addresses, AVS / IBAN / SCIPER, passport numbers, dates of birth, and
 photos. The anonymiser (`src/agentic_admission/anonymizer/`,
-~75 KB of code) is a Presidio + GLiNER pipeline with:
+~75 KB of code) is a Presidio @presidio + GLiNER @zaratiana2024gliner
+pipeline with:
 
 - Custom recognisers for Swiss-specific PII (AVS, SCIPER) in
   `recognizers.py`.
@@ -362,7 +388,7 @@ above 99% on the next audit pass.
     #align(center)[
       #dnode(
         [Verdict JSON],
-        sub: [accept / reject / waitlist, 8 dimension scores, pros/cons per dimension],
+        sub: [accept / reject / waitlist, 8 dimension scores, pros/cons per dimension, recommended minor],
         fill: epfl-red.lighten(85%),
         stroke-colour: epfl-red,
       )
@@ -470,14 +496,50 @@ The Chair recommendation feeds the decision function:
 A second decision layer sits on top: the GPA gate, which only fires
 for EPFL-internal candidates and is described in Section 6.
 
+== Minor recommendation
+
+Accepted MTE candidates enrol in a disciplinary minor, and the
+supervisor asked (meeting of 2026-04-19) that the system recommend
+one for every dossier it reads. The recommendation is a first-class
+output: `PanelVerdict.minor_recommendation` carries three ranked
+minors with a 1--10 fit score and a short justification each, and
+the dashboard shows them next to the verdict.
+
+Two paths produce the ranking (`agents/minor_advisor.py`):
+
++ *EPFL-internal candidates* resolve through a fixed
+  section-adjacency table (`agents/epfl_minor_map.py`): 16 EPFL
+  bachelor names, detected from the `Domaine principal d'études`
+  field of the synthesis form, map to a ranked triple drawn from a
+  36-minor registry. The table encodes the committee's
+  stay-in-or-near-the-section practice and was confirmed with the
+  supervisor on 2026-05-09. Deterministic picks carry fixed scores
+  10 / 9 / 8 so the dashboard can tell them apart from LLM fit
+  scores. Detection is exact-match on purpose: an OCR-garbled
+  bachelor name falls through to the LLM advisor instead of
+  routing to the wrong section.
+
++ *External candidates*, and internals whose bachelor cannot be
+  detected, go to an LLM advisor. When the scraped EPFL course
+  catalogue is available, a curriculum-match report maps the
+  candidate's courses to EPFL equivalents and the advisor grounds
+  its ranking in that overlap; otherwise it works from transcript
+  and CV alone. The prompt excludes the MTE master's own mirror
+  minor, and a post-filter drops it anyway if the model recommends
+  it regardless.
+
+The advisor runs as a fifth parallel task next to the four
+evaluators, and its failure is non-fatal: the verdict ships with an
+empty recommendation rather than blocking the panel.
+
 == LLM client
 
 The LLM client (`agents/llm_client.py`, 352 lines) speaks to vLLM
-endpoints (Sonnet 4.6 via Anthropic-compatible API, Gemini Flash via
-OpenRouter, Llama 3.1 served locally on SCITAS GPUs). vLLM does not
-support OpenAI's `response_format` field, so the client injects the
-JSON schema into the system prompt and validates the response with
-Pydantic. Three retries on empty content, explicit `LLMBillingError`
+@kwon2023vllm endpoints (Sonnet 4.6 via Anthropic-compatible API,
+Gemini Flash via OpenRouter, Llama 3.1 served locally on SCITAS
+GPUs). The vLLM build we serve on SCITAS does not expose OpenAI's
+`response_format` field, so the client injects the JSON schema into
+the system prompt and validates the response with Pydantic. Three retries on empty content, explicit `LLMBillingError`
 on HTTP 402, exponential back-off on transport errors. The function
 was refactored from a single 18-complexity, 69-statement monster into
 a 45-line orchestrator + four named helpers (`_build_payload`,
@@ -491,7 +553,7 @@ week 14 cleanup.
 = Engineering approach
 
 This section makes the case that the engineering choices on this
-project were academically motivated. Spec-first design, TDD, lint
+project were academically motivated. Spec-first design, lint
 hygiene, and atomic PRs sound like industrial good-practice. On a
 research project that needs to be reproducible, defensible, and
 extended by someone else next year, they are necessary conditions for
@@ -524,33 +586,6 @@ Every non-trivial change starts as a Markdown design document in
 The benefit shows up in code review: the reviewer reads the design doc
 first, then reads the PR, and the PR is small because the doc covered
 the rationale.
-
-== Test-driven discipline
-
-The repository ships 519 passing tests at 57.7% line coverage with
-`pytest --exitfirst --failed-first` as the default invocation. Tests
-treat warnings as errors. The CI pipeline runs lint, type check, and
-tests on every push to `main` and on every PR. A pre-commit hook runs
-ruff, ruff-format, and the `ty` type checker before any commit lands.
-
-The discipline broke once. The week-11 schema migration changed
-`AgentScorecard.justifications` from `dict[str, str]` to
-`dict[str, DimensionJustification]`. The migration shipped under a PR
-that I declared green; in fact 28 tests failed silently because
-`--exitfirst` stopped on the first schema error and reported only
-that one. The dead tests stayed dead for three weeks. Week 14 paid
-the debt: I centralised fixture helpers in `tests/conftest.py`
-(`make_scorecard`, `make_justification`, `make_verdict_summary`,
-`make_panel_verdict`), replaced 28 broken assertions mechanically,
-and added a CI step that runs `pytest -ra --tb=no` without
-`--exitfirst` so the full failure surface is visible on every push.
-
-#callout(title: "Lesson", icon: "!", colour: warning-amber)[
-  `--exitfirst` is a developer-experience flag, not a CI flag. The
-  CI must run the full suite even when an early failure looks
-  conclusive. The cost of a missing test failure is paid weeks
-  later when an unrelated change touches the dead code.
-]
 
 == Lint as a quality gate
 
@@ -723,8 +758,9 @@ The system now plumbs an `EpflInternalBand` enum from extraction
 through to the Chair (`gpa_gate.py` adds 58 lines; `chair.py` adds
 89 / -19 to handle the band in `apply_gate_overrides` and
 `clamp_academic_strength_below_threshold`). The constants
-`_EPFL_INTERNAL_ACCEPT_FLOOR = 4.5` and `_EPFL_INTERNAL_REJECT_FLOOR
-= 4.0` are documented as committee values, not tuning parameters.
+`_EPFL_INTERNAL_ACCEPT_FLOOR` (4.5) and
+`_EPFL_INTERNAL_REJECT_FLOOR` (4.0) are documented as committee
+values, not tuning parameters.
 
 The agreement on the 28-candidate EPFL-internal sub-cohort moved
 from 19 / 28 (68%) to 23 / 28 (82%) after the rule shipped in
@@ -735,6 +771,20 @@ PR \#23.
 + *Calibration set size.* 128 Spring 2025--26 candidates is small;
   sub-cohort results (28 EPFL-internals) are tighter.
 
++ *Development-set tuning.* Every prompt and gate edit between
+  weeks 12 and 14 was selected against the same 28 EPFL-internal
+  candidates the 82% is reported on. The number is a
+  calibration-set fit; the held-out test is the Fall 2025--26
+  cohort listed in Section 8.
+
++ *Class imbalance.* The committee accepted 27 of the 28
+  EPFL-internals, so an accept-everyone rule scores 96.4% raw
+  agreement and the system's 82% sits below it. Raw agreement is
+  the wrong lens on this sub-cohort; the five disagreements are the
+  informative read: one hard reject the committee overrode as an
+  exception, three discuss-band waitlists, and one committee reject
+  the system routed to discussion instead of admitting.
+
 + *Single LLM family.* All headline numbers come from one model
   family. A Gemini Flash vs Sonnet 4.6 comparison is in the
   future-work list.
@@ -742,6 +792,11 @@ PR \#23.
 + *Prompt sensitivity.* The agreement number moves with paragraph-level
   prompt edits. The 5-run majority vote dampens this; per-run stdev
   on composite is 0.175.
+
++ *Judge biases.* Verbosity and position effects are documented for
+  LLM judges @saito2023verbosity @wang2023fair. We neither shuffle
+  document order inside the dossier prompt nor control for letter
+  length; each probe costs one cohort run on the existing corpus.
 
 + *Selection on the committee.* The committee's recorded decision
   is itself a noisy estimate. Any agreement number is bounded above
@@ -787,10 +842,9 @@ vote, the confusion matrix against the committee is:
   table(
     columns: (auto, auto, auto, auto, auto),
     align: (left, center, center, center, center),
-    [*Committee \\ System*], [*accept*], [*waitlist*], [*reject*], [*Total*],
-    [*accept*], [34], [6], [1], [41],
-    [*waitlist*], [0], [0], [0], [0],
-    [*reject*], [20], [46], [20], [86],
+    [], [*System: accept*], [*System: waitlist*], [*System: reject*], [*Total*],
+    [*Committee: accept*], [34], [6], [1], [41],
+    [*Committee: reject*], [20], [46], [20], [86],
   ),
   caption: [Confusion matrix, Spring 2025--26, mode of 5 runs,
             127 / 128 matched. The committee uses two output
@@ -813,8 +867,8 @@ the wrong number to report alone. Two corrections matter:
 
 == Disagreement classes
 
-The 73 disagreements (everything off the matrix diagonal) split into
-four classes:
+The 73 disagreements (every candidate where the two verdicts differ)
+split into four classes:
 
 #figure(
   table(
@@ -1145,7 +1199,7 @@ disagreement is a hypothesis about the system's rule or the
 committee's rule, and every iteration of the loop in Section 6 has
 moved the agreement number in one direction.
 
-The engineering posture (spec-first, TDD, atomic PRs, ruff `ALL`)
+The engineering posture (spec-first, atomic PRs, ruff `ALL`)
 exists in service of the academic claim. A research contribution
 that cannot be reproduced is a research contribution that cannot be
 checked. The four-command reproduction in Section 5 is the test of
@@ -1158,6 +1212,14 @@ committee-side dashboard that puts the system's reasoning next to
 the committee's own. None of these requires new architecture. All of
 them require the careful, falsifiable measurement loop the project
 has built.
+
+// =============================================================================
+//  References
+// =============================================================================
+
+#pagebreak()
+
+#bibliography("references.bib", style: "ieee", title: "References")
 
 // =============================================================================
 //  Appendices
