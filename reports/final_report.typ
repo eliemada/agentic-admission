@@ -524,9 +524,11 @@ Two paths produce the ranking (`agents/minor_advisor.py`):
   catalogue is available, a curriculum-match report maps the
   candidate's courses to EPFL equivalents and the advisor grounds
   its ranking in that overlap; otherwise it works from transcript
-  and CV alone. The prompt excludes the MTE master's own mirror
-  minor, and a post-filter drops it anyway if the model recommends
-  it regardless.
+  and CV alone. The prompt excludes the two minors the CDM committee
+  itself runs (the MTE master's mirror minor and Financial
+  Engineering, each a dedicated master in its own right), and a
+  post-filter drops them anyway if the model recommends one
+  regardless.
 
 The advisor runs as a fifth parallel task next to the four
 evaluators, and its failure is non-fatal: the verdict ships with an
