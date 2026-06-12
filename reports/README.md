@@ -10,7 +10,6 @@ analyses behind the results chapter.
 |---|---|
 | [`final_report.pdf`](final_report.pdf) ([source](final_report.typ)) | The semester report — 11 sections, 3 appendices, bibliography ([`references.bib`](references.bib)) |
 | [`final_presentation.pptx`](final_presentation.pptx) | 15-slide defence deck with speaker notes |
-| [`anonymization-audit.pdf`](anonymization-audit.pdf) ([source](anonymization-audit.typ)) | 900-file stratified anonymisation audit (50 × 18 document types, seed 42) |
 | [`architecture-design.pdf`](architecture-design.pdf) | Pre-implementation architecture sketch (week 6) |
 | [`figures/`](figures/) | Graphviz deliberation-protocol diagrams + completeness heatmap |
 
@@ -53,7 +52,6 @@ Raw before/after analyses that feed §6–7 of the final report:
 
 ```bash
 cd reports && typst compile final_report.typ          # final report
-cd reports && typst compile anonymization-audit.typ   # audit
 cd reports/weekly && typst compile semaine-14.typ     # any weekly report
 cd reports/figures && dot -Tpng deliberation_protocol.dot -o deliberation_protocol.png
 ```

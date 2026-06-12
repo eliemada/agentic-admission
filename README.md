@@ -17,7 +17,7 @@
 
 > A decision-support system that emulates the EPFL **Master in Management, Technology and Entrepreneurship (MTE)** admission committee using a panel of four specialist LLM evaluators and a Chair. Calibrated against six years of historical committee verdicts (1,342 candidates, 2020–2026). Reaches **82% agreement with the committee on the 28 EPFL-internal candidates** of Spring 2025–26 after a documented three-band GPA rule, with a 5-run majority-vote stability of **76.6%** on the full 128-candidate cohort.
 
-**Deliverables:** [final report (PDF)](reports/final_report.pdf) · [defence deck](reports/final_presentation.pptx) · [anonymisation audit](reports/anonymization-audit.pdf) · [weekly reports](reports/weekly/) · [full deliverables index](reports/README.md)
+**Deliverables:** [final report (PDF)](reports/final_report.pdf) · [defence deck](reports/final_presentation.pptx) · [weekly reports](reports/weekly/) · [full deliverables index](reports/README.md)
 
 ---
 
@@ -66,7 +66,7 @@ Each step in the table below corresponds to a weekly report in [`reports/weekly/
 |---|---|---|---|
 | **1. Survey** | Read the LLM-as-judge literature (MT-Bench, AlpacaEval, JudgeBench). Walked through past committee decisions with the supervisor. | Zero-shot LLM judgement drifts in domain-specific ways; we will need a calibration loop. | [`reports/weekly/semaine-01.typ`](reports/weekly/semaine-01.typ) |
 | **2. Data archaeology** | Took six years of inconsistent committee Excel exports (2020–2026), normalised them into a single Parquet of 1,342 candidates. | Schema drifts every year; fuzzy header matching and multi-row grouping are necessary. | [`extraction/pipeline.py`](src/agentic_admission/extraction/pipeline.py) (523 LOC) |
-| **3. Anonymisation** | Cleaned 12,529 dossier documents (transcripts, letters, CVs, certificates) with Presidio + GLiNER. Audited a 900-file stratified sample. | A custom name-propagation step is needed to catch ALL-CAPS names that GLiNER misses; passport pages need to be stripped before text extraction. | [`anonymizer/`](src/agentic_admission/anonymizer/) ([`anonymization-audit.pdf`](reports/anonymization-audit.pdf)) |
+| **3. Anonymisation** | Cleaned 12,529 dossier documents (transcripts, letters, CVs, certificates) with Presidio + GLiNER. Audited a 900-file stratified sample. | A custom name-propagation step is needed to catch ALL-CAPS names that GLiNER misses; passport pages need to be stripped before text extraction. | [`anonymizer/`](src/agentic_admission/anonymizer/) |
 | **4. Architecture** | Designed a four-evaluator + Chair panel under structured JSON outputs. Spec-first in [`docs/plans/2026-03-16-multi-agent-deliberation-design.md`](docs/plans/2026-03-16-multi-agent-deliberation-design.md). | Specialist separation gives audit handles: when system disagrees with committee, you can read four scorecards side-by-side. | [`agents/`](src/agentic_admission/agents/) |
 | **5. First calibration** | Ran on Spring 2025–26, measured 50% agreement on EPFL-internals. | We need a falsification event, not a tuning loop. | [`reports/calibration/committee-vs-system-2026-05-11.md`](reports/calibration/committee-vs-system-2026-05-11.md) |
 | **6. The Maillard case** | Five of eight EPFL-internal rejects had algebra+analysis avg in [4.0, 4.5]. The committee admitted them on the **recovery trajectory** that a binary threshold cannot see. | The system's rule was simpler than the committee's. Email Géraldine (former chair). | [`docs/plans/2026-05-08-epfl-internal-branch.md`](docs/plans/2026-05-08-epfl-internal-branch.md) |
@@ -155,7 +155,7 @@ A second decision layer sits on top: the **GPA gate**, which only fires for EPFL
 |---|---|---|
 | EPFL-internal agreement | **82%** (23/28) | Single run after PR #23, up from a 50% baseline |
 | Decision stability | **76.6%** (98/128) | Same decision across 5 independent runs |
-| Anonymisation coverage | **100%** | Emails, phones, addresses, AVS/IBAN/URLs; names 96.1% → >99% after fixes (see [audit](reports/anonymization-audit.pdf)) |
+| Anonymisation coverage | **100%** | Emails, phones, addresses, AVS/IBAN/URLs; names 96.1% → >99% after fixes |
 
 ### EPFL-internal sub-cohort — three weeks of measurement
 
@@ -302,7 +302,6 @@ agentic-admission/
 │   ├── final_report.{typ,pdf}    # Final project report
 │   ├── final_presentation.pptx   # 15-slide defence deck
 │   ├── references.bib            # Report bibliography
-│   ├── anonymization-audit.{typ,pdf} # 900-file stratified audit
 │   ├── architecture-design.pdf   # System architecture (one-pager)
 │   ├── weekly/                   # 14 weekly reports, semaine-{01..14}.{typ,pdf}
 │   ├── calibration/              # Calibration analyses (committee vs. system)
@@ -344,7 +343,6 @@ Every headline number in this README reproduces from a clean checkout; the table
 | [`reports/final_presentation.pptx`](reports/final_presentation.pptx) | 15-slide defence deck with speaker notes |
 | [`reports/weekly/`](reports/weekly/) | 14 weekly progress reports (`semaine-01` … `semaine-14`, `.typ` + `.pdf`) |
 | [`reports/architecture-design.pdf`](reports/architecture-design.pdf) | One-page architectural overview |
-| [`reports/anonymization-audit.pdf`](reports/anonymization-audit.pdf) | 900-file stratified audit (50 × 18 doc types, seed 42) |
 | [`docs/plans/`](docs/plans/) | 8 spec-first design documents |
 | [`reports/calibration/committee-vs-system-policy-v2.md`](reports/calibration/committee-vs-system-policy-v2.md) | Raw calibration analysis underlying §7 of the final report |
 | [`reports/calibration/`](reports/calibration/) | Before/after diffs for the three EPFL-internal iterations (`epfl-internal-fix*.md`) and cohort-variance analysis |
