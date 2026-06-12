@@ -234,10 +234,11 @@ async def recommend_minor(
     # replacement.
     recommended = tuple(s for s in raw_recommended if not is_non_recommendable_minor(s.minor_name))
     if len(recommended) < len(raw_recommended):
-        dropped = [s.minor_name for s in raw_recommended if is_non_recommendable_minor(s.minor_name)]
+        dropped = [
+            s.minor_name for s in raw_recommended if is_non_recommendable_minor(s.minor_name)
+        ]
         logger.warning(
-            "Dropped non-recommendable minor(s) from recommendations "
-            "(LLM ignored exclusion): {}",
+            "Dropped non-recommendable minor(s) from recommendations (LLM ignored exclusion): {}",
             dropped,
         )
 

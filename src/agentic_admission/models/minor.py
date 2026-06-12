@@ -246,10 +246,7 @@ _MTE_MASTER_MINOR_NAME: str = "Management, Technology and Entrepreneurship"
 # stay in ``ALL_MINORS`` so historical transcripts that mention them still
 # resolve via ``get_minor_by_name``.
 _NON_RECOMMENDABLE_MINOR_NAMES: frozenset[str] = frozenset(
-    {
-        _MTE_MASTER_MINOR_NAME,
-        "Financial Engineering",
-    },
+    {_MTE_MASTER_MINOR_NAME, "Financial Engineering"}
 )
 
 

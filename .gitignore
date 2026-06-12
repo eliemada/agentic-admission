@@ -8,6 +8,7 @@ reports/*.html
 # Whitelisted final deliverables (linked from README)
 !reports/final_report.pdf
 !reports/anonymization-audit.pdf
+!reports/architecture-design.pdf
 
 # Copier
 *.rej
@@ -29,10 +30,10 @@ data/
 # Hypothesis
 .hypothesis/
 
-# Jupyter
+# Jupyter / Marimo
 *.ipynb
 .ipynb_checkpoints/
-notebooks/
+notebooks/__marimo__/
 
 # macOS
 .DS_Store

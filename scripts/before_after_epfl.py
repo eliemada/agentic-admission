@@ -149,7 +149,9 @@ def main() -> None:
         type=Path,
         default=[Path(f"data/processed/runs_postfix/run{i:02d}") for i in range(1, 6)],
     )
-    p.add_argument("--output", type=Path, default=Path("reports/epfl-internal-fix-before-after.md"))
+    p.add_argument(
+        "--output", type=Path, default=Path("reports/calibration/epfl-internal-fix-before-after.md")
+    )
     args = p.parse_args()
 
     info = _build_hash_to_name(args.excel)

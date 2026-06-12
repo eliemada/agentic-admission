@@ -14,7 +14,7 @@ Run::
 
     uv run python scripts/cohort_variance_stats.py \\
         --runs data/processed/runs/run01 data/processed/runs/run02 ... \\
-        --output reports/cohort-variance-2026-05-09.md
+        --output reports/calibration/cohort-variance-2026-05-09.md
 """
 
 from __future__ import annotations

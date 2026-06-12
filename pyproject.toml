@@ -88,6 +88,8 @@ fix = true
 line-length = 100
 src = ["src", "tests"]
 target-version = "py313"
+# Marimo notebooks are generated cell files; tracked for reproducibility, not linted
+extend-exclude = ["notebooks"]
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -246,14 +248,6 @@ type = "simple"
   [tool.poe.tasks.export-dossier-eda]
   help = "Export dossier EDA notebook to reports/dossier_eda.html"
   cmd = "marimo export html notebooks/dossier_eda.py -o reports/dossier_eda.html"
-
-  [tool.poe.tasks.filetype-eda]
-  help = "Open the file-type EDA notebook in the browser"
-  cmd = "marimo edit notebooks/filetype_eda.py"
-
-  [tool.poe.tasks.export-filetype-eda]
-  help = "Export file-type EDA notebook to reports/filetype_eda.html"
-  cmd = "marimo export html notebooks/filetype_eda.py -o reports/filetype_eda.html"
 
   [tool.poe.tasks.normalize-files]
   help = "Copy dossiers to processed/ with fixed filenames and docx→pdf conversion"

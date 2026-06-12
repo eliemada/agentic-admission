@@ -39,3 +39,8 @@ jobs:
 
       - name: Test (skip slow ML integration tests)
         run: uv run coverage run -m pytest -m "not slow" && uv run coverage report
+
+      # Full failure surface: re-run without --exitfirst so one failure
+      # cannot mask the rest (see README "CI runs the full suite").
+      - name: Test (full failure report, no exitfirst)
+        run: uv run pytest -m "not slow" -ra --tb=no -o addopts=""
