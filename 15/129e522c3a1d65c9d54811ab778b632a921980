@@ -1,0 +1,24 @@
+CLAUDE.md
+  s_2461c755525158::t_00860a0ecf1b16 11
+  s_2461c755525158::t_c67dfc8e25b423 219
+README.md
+  s_2461c755525158::t_27e233888cc00b 20
+  s_2461c755525158::t_9f06f37581249c 69
+  s_2461c755525158::t_efba7e9b51f2f2 158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "15129e522c3a1d65c9d54811ab778b632a921980",
+  "prompts": {},
+  "sessions": {
+    "s_2461c755525158": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "17fe0951-f012-4ee2-820e-93b958492ee6",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Elie BRUNO <contact@eliebruno.com>"
+    }
+  }
+}
