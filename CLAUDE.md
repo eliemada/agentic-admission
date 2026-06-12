@@ -6,7 +6,7 @@ Guidance for Claude Code (claude.ai/code) and other AI assistants working in thi
 
 Agentic Admission is a multi-agent LLM panel that triages MTE (Master in Management, Technology, and Entrepreneurship) application dossiers at EPFL. Four specialist evaluator agents read a dossier in parallel, a Chair agent detects disagreement and synthesises a weighted verdict, and a deterministic GPA gate applies a three-band ACCEPT/DISCUSS/REJECT rule. Output is bullet-point pros/cons (not prose) so the committee can scan many candidates quickly.
 
-Calibrated against the 2025-26 EPFL-internal cohort, the panel reaches **82% agreement with the committee** (23/28, single-run), **76.6% decision stability** across 5 runs, and **100% anonymisation coverage** on high-sensitivity PII. The whole system is model-agnostic: it runs on Gemini Flash (~$0.08/dossier), Sonnet 4.6 (~$0.70/dossier), or locally on EPFL's SCITAS cluster via vLLM-served Llama 3.1 (~$0).
+Calibrated against the 2025-26 EPFL-internal cohort, the panel reaches **82% agreement with the committee** (23/28, single-run), **76.6% decision stability** across 5 runs, and **100% anonymisation coverage** on emails, phones, addresses, and Swiss identifiers (>99% on names after two targeted fixes). The whole system is model-agnostic: it runs on Gemini Flash (~$0.08/dossier), Sonnet 4.6 (~$0.70/dossier), or locally on EPFL's SCITAS cluster via vLLM-served Llama 3.1 (~$0).
 
 Final deliverables live in `reports/`: `final_report.typ` (the semester report, builds to ~400 KB PDF), `final_presentation.pptx` (15-slide defence deck), `anonymization-audit.typ`, plus Graphviz architecture diagrams under `reports/figures/`.
 
@@ -18,7 +18,7 @@ uv is the package manager; poethepoet runs all tasks. Prefix with `uv run`.
 uv sync --frozen                  # Install deps from uv.lock (fails if lock stale)
 uv run poe lint                   # pre-commit: ruff check, ruff format, ty, etc.
 uv run poe typecheck              # ty check src/
-uv run poe test                   # pytest + coverage (gate at 55%, currently ~57.8%)
+uv run poe test                   # pytest + coverage (gate at 55%, currently ~57.9%)
 uv run pytest tests/test_chair.py # Run a single test file
 ```
 
@@ -62,14 +62,13 @@ uv run poe dashboard-dev      # Dev: hot-reload FastAPI + Vite dev server in par
 ```bash
 uv run poe eda                # Open notebooks/eda.py
 uv run poe dossier-eda        # Open notebooks/dossier_eda.py
-uv run poe filetype-eda       # Open notebooks/filetype_eda.py
-uv run poe export-eda         # Render eda.py to reports/eda.html (also: export-dossier-eda, export-filetype-eda)
+uv run poe export-eda         # Render eda.py to reports/eda.html (also: export-dossier-eda)
 ```
 
 ## Architecture
 
 ```
-src/agentic_admission/        # 12,323 LOC across ~55 modules
+src/agentic_admission/        # ~12,400 LOC across ~58 modules
 ├── main.py                   # Entry point: configures loguru, launches pipeline
 ├── config.py                 # pydantic-settings: loads .env
 ├── models/                   # Pydantic models
@@ -77,7 +76,7 @@ src/agentic_admission/        # 12,323 LOC across ~55 modules
 │   ├── document.py           # Per-document metadata
 │   ├── dossier.py            # Full dossier (multiple documents)
 │   ├── evaluation.py         # AgentScorecard, PanelVerdict, DebateTranscript
-│   └── minor.py              # Disciplinary-minor catalogue (37 minors, 15 sections)
+│   └── minor.py              # Disciplinary-minor catalogue (36 minors, 18 sections)
 ├── agents/                   # The 4-evaluator panel + Chair
 │   ├── llm_client.py         # 352 lines: shared httpx, JSON-schema mode, exp backoff
 │   ├── evaluators.py         # 306 lines: Academic, Reference, Motivation, Devil's Advocate
@@ -129,7 +128,7 @@ src/agentic_admission/        # 12,323 LOC across ~55 modules
    - Motivation Evaluator → `motivation_clarity`, `program_fit`
    - Devil's Advocate → `risk_flags`, `consistency`
    Output is bullet-point pros/cons, never prose. Evaluators never see each other's scorecards (prevents anchoring).
-2. **Phase 2 — Disagreement Detection.** Chair flags any dimension where two evaluators differ by more than 2 points.
+2. **Phase 2 — Disagreement Detection.** The Chair detects *semantic* disagreement via an LLM call (`chair.py detect_disagreements`): two evaluators interpreting the same evidence differently, not a numeric score-gap threshold.
 3. **Phase 3 — Targeted Debate** (conditional). For each flagged dimension, run a 2-round structured debate: round 1 positions, round 2 rebuttals. If no conflicts, skip.
 4. **Phase 4 — Final Synthesis.** Chair computes a weighted composite over 8 dimensions. Profile-dependent weights live in `agents/evaluation_profile.py` as `EXTERNAL_PROFILE` and `EPFL_INTERNAL_PROFILE` (both frozen dataclasses; weights must sum to 1.0 or construction fails). Shape of the weighting:
    - **External candidates** (default): academic_strength + institution_quality + reference_quality dominate (66%); calibration_confidence carries 12%; motivation and program_fit are tiebreakers (6% each); risk_flags + consistency are sanity checks (10% combined).
@@ -149,17 +148,22 @@ src/agentic_admission/        # 12,323 LOC across ~55 modules
 
 ```
 reports/
+├── README.md                        # Deliverables index (start here for grading)
 ├── final_report.typ                 # Semester report; builds with `typst compile`
-├── final_report.pdf                 # Rendered (gitignored unless explicitly whitelisted)
+├── final_report.pdf                 # Rendered (whitelisted in .gitignore, committed)
 ├── final_presentation.pptx          # 15-slide defence deck
-├── anonymization-audit.typ          # Anonymisation methodology + coverage numbers
+├── anonymization-audit.typ/.pdf     # Anonymisation methodology + coverage numbers
 ├── architecture-design.pdf          # Pre-implementation architecture sketch
+├── references.bib                   # Report bibliography
 ├── figures/
 │   ├── deliberation_protocol.dot/.png/.pdf/.svg         # Portrait diagram for the report
 │   ├── deliberation_protocol_landscape.dot/.png         # Landscape variant for slide 7
 │   └── completeness_matrix.png                          # Per-year document-completeness heatmap
-├── semaine-{01..14}.typ             # Weekly progress reports
-└── committee-vs-system-*.md         # Per-iteration calibration analyses
+├── weekly/
+│   ├── template.typ                 # Shared weekly-report template (also used by the audit)
+│   └── semaine-{01..14}.typ/.pdf    # Weekly progress reports (PDFs committed)
+└── calibration/
+    └── *.md                         # Per-iteration calibration analyses (committee vs system)
 ```
 
 Rebuild any Typst report: `cd reports && typst compile final_report.typ`. Rebuild a Graphviz diagram: `cd reports/figures && dot -Tpng deliberation_protocol_landscape.dot -o deliberation_protocol_landscape.png`.
@@ -170,7 +174,7 @@ Rebuild any Typst report: `cd reports && typst compile final_report.typ`. Rebuil
 - **Ruff** with `select = ["ALL"]` (strict); line length 100; numpy-style docstrings; relative imports banned (`ban-relative-imports = "all"`).
 - **Pydantic v2** for all data models and settings. Settings loaded from `.env` via `pydantic-settings`.
 - **loguru** for logging, never stdlib `logging`.
-- Tests run with `--exitfirst --failed-first` and treat warnings as errors. Coverage gate at 55% (currently ~57.8%, 519 tests across 29 files).
+- Tests run with `--exitfirst --failed-first` and treat warnings as errors. Coverage gate at 55% (currently ~57.9%, 535 tests across 30 files).
 - Pre-commit hooks: ruff check, ruff format, **ty** (Astral's type checker, not mypy), uv lock consistency, file-end normalisation.
 - **`# type: ignore[...]` does not work for `ty`.** When `ty` complains about a loose `object` parameter, type it properly via a `TYPE_CHECKING` import. See `preprocessing/text_extraction.py` for the pattern.
 
@@ -217,7 +221,7 @@ PII handling is non-negotiable: every dossier goes through `anonymizer/presidio_
 
 ## Important nuances for future sessions
 
-- **Minor assignment is a first-class output.** Per the 2026-04-19 supervisor meeting, the system must not only emit ACCEPT/DISCUSS/REJECT but also recommend a disciplinary minor for accepted candidates. The mapping rules live in `agents/epfl_minor_map.py` (37 minors across 15 sections, default-fallback: Industrial Engineering bachelor → Systems Engineering minor). `agents/minor_advisor.py` does the LLM-driven recommendation from bachelor + courses + motivation. EPFL-internal candidates get lighter-weight evaluation.
+- **Minor assignment is a first-class output.** Per the 2026-04-19 supervisor meeting, the system must not only emit ACCEPT/DISCUSS/REJECT but also recommend a disciplinary minor for accepted candidates. The mapping rules live in `agents/epfl_minor_map.py` (36 minors across 18 sections, 16 bachelor mappings, default-fallback: Industrial Engineering bachelor → Systems Engineering minor). `agents/minor_advisor.py` does the LLM-driven recommendation from bachelor + courses + motivation. EPFL-internal candidates get lighter-weight evaluation.
 - **`typer` is pinned directly** in `pyproject.toml` even though nothing in this codebase imports it. `weasel 1.0` dropped it as a hard transitive, but `spacy.cli.download` still imports it at module load and `presidio_analyzer.nlp_engine` triggers that import. Removing the pin breaks every test that touches the anonymiser. See the comment above the dep in `pyproject.toml`.
 - **EPFL-internal vs external candidates use different weights AND different thresholds.** Don't tune one without the other. The split was the single biggest calibration win, taking EPFL-internal agreement from 68% to 82% (PR #23).
 - **Output format is bullet-point pros/cons in two columns (+ / −), never prose paragraphs.** This is a hard requirement from the professor. Agent prompts must instruct bullet output. The dashboard renders + in green, − in red, debates behind click-to-expand.

@@ -27,8 +27,9 @@
     against the committee's own historical verdicts on 1,342 candidates
     from 2020 to 2026. The system normalises Excel inputs that change
     schema every year, anonymises 12,529 dossier documents with a
-    Presidio + GLiNER pipeline that reaches 100% coverage on
-    high-sensitivity PII, runs a structured-output multi-agent
+    Presidio + GLiNER pipeline that reaches 100% coverage on emails,
+    phones, addresses, and Swiss identifiers (above 99% on names
+    after two targeted fixes), runs a structured-output multi-agent
     deliberation against vLLM-served models, and applies a three-band
     GPA gate that mirrors the rule a former chair documented in 2026.
     On the Spring 2025--26 cohort the system reaches 82% agreement with
@@ -629,7 +630,7 @@ The full pipeline reproduces from a clean checkout in four commands:
     [`uv sync --frozen`], [Installs pinned dependencies from `uv.lock`],
     [`uv run poe extract`], [Builds the 1,342-candidate Parquet from raw Excels],
     [`uv run poe lint`], [Runs the 700+ ruff rules + `ty` type check],
-    [`uv run poe test`], [Runs the 519-test suite with coverage gate],
+    [`uv run poe test`], [Runs the 535-test suite with coverage gate],
   ),
   caption: [The four commands that recreate the audit-grade state of
             the repository. The lockfile is committed; CI verifies
@@ -701,8 +702,10 @@ the LLM is actually applying.
 
 The ground truth is the committee's recorded decision: one of accept,
 reject, waitlist. The Spring 2025--26 cohort holds 128 candidates,
-matched against 127 anonymised verdicts (one candidate, Farrel Gamma,
-appears in the Excel but not in the anonymised corpus). The committee
+matched against 127 anonymised verdicts (one candidate, Farrel
+Gamma#footnote[All candidate names in this report (Farrel Gamma,
+Etienne Maillard, Biersohn) are pseudonyms.], appears in the Excel
+but not in the anonymised corpus). The committee
 uses `accept` and `reject` only; `waitlist` is a system-side category
 that maps to the committee's in-meeting discussion.
 
@@ -1290,15 +1293,15 @@ Concrete facts, active voice, no adverbs, no filler.
     columns: (auto, auto),
     align: (left, left),
     [*Item*], [*Value*],
-    [Lines of source (`src/agentic_admission/`)], [12 319 LOC (55 modules)],
-    [Test count], [519 passing],
-    [Coverage], [57.7% (line)],
+    [Lines of source (`src/agentic_admission/`)], [12 444 LOC (58 modules)],
+    [Test count], [535 passing],
+    [Coverage], [57.9% (line)],
     [Ruff rules enforced on `src/`], [~700 (rule set `ALL`)],
     [Type checker], [`ty` (zero errors)],
     [Pull requests merged on `main`], [23],
-    [Weekly reports], [14 (`semaine-01.typ` .. `semaine-14.typ`)],
+    [Weekly reports], [14 (`reports/weekly/semaine-01.typ` .. `semaine-14.typ`)],
     [Design docs in `docs/plans/`], [8],
-    [Analysis reports in `reports/`], [7 Markdown + 2 Typst],
+    [Analysis reports], [7 Markdown (`reports/calibration/`) + 2 Typst],
     [Anonymisation corpus], [12 529 files],
     [Sampled audit set], [900 files (50 × 18 types, seed 42)],
     [Candidates in canonical Parquet], [1 342 (2020--2026)],

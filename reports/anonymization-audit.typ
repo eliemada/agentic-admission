@@ -3,7 +3,7 @@
 //  EPFL · Section MTE
 // ─────────────────────────────────────────────────────────────────────────────
 
-#import "template.typ": *
+#import "weekly/template.typ": *
 
 #let success-green = rgb("#10B981")
 #let warning-amber = rgb("#F59E0B")

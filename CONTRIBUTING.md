@@ -1,8 +1,6 @@
 # Contributing to Agentic Admission
 
-Thank you for your interest in improving this project. This guide is short on purpose: the bar is *clarity* and *reproducibility*, not gatekeeping.
-
-This is a research codebase built around a measure-and-close loop. Every change should make the next measurement easier, not harder.
+This is a research codebase built around a calibration loop. Changes are judged on whether they keep the next measurement re-runnable.
 
 ---
 
@@ -10,7 +8,7 @@ This is a research codebase built around a measure-and-close loop. Every change 
 
 1. **No PII in commits.** Real candidate names, emails, transcripts, or letters must never land in the repository — not in tests, fixtures, comments, screenshots, nor commit messages. The `data/` directory is gitignored on purpose. Synthetic or redacted-by-design examples only.
 2. **Spec-first for non-trivial changes.** If a change is larger than a bug fix, write a short Markdown design doc in [`docs/plans/`](docs/plans/) first. State the hypothesis, the alternatives considered, the chosen approach, and the validation criteria. See existing design docs for shape.
-3. **Measurement, not opinions.** Claims about agreement / stability / coverage must come with a re-runnable script. Prefer numbers from `scripts/` or `tests/` over numbers from a notebook cell.
+3. **Back claims with a script.** Claims about agreement, stability, or coverage must come with a re-runnable script; prefer numbers from `scripts/` or `tests/` over notebook cells.
 
 ---
 
@@ -21,7 +19,7 @@ git clone https://github.com/eliemada/agentic-admission.git
 cd agentic-admission
 uv sync --frozen
 uv run poe setup-nlp        # one-time spaCy model download
-pre-commit install          # ruff + ruff-format + ty + uv lock check
+uv run pre-commit install   # ruff + ruff-format + ty + uv lock check
 ```
 
 Copy `.env.example` to `.env` and fill in your endpoints / API keys (none are required for `lint` / `typecheck` / `test`).
@@ -35,11 +33,11 @@ Every change must satisfy:
 ```bash
 uv run poe lint        # 700+ ruff rules + pre-commit hooks
 uv run poe typecheck   # ty check src (zero errors required)
-uv run poe test        # 519+ tests, ≥55% coverage gate
+uv run poe test        # 535+ tests, ≥55% coverage gate
 uv run poe extract     # rebuild the canonical Parquet if extraction touched
 ```
 
-If any of these fails, the PR is not ready. CI runs the first three on every push.
+If any of these fails, the PR is not ready. CI runs `ruff check`, the type check, and the test suite on every push.
 
 ---
 
@@ -82,7 +80,7 @@ If your code lives in `scripts/`, `slurm/`, or `dashboard/`, relaxed lint rules 
 - [ ] New code paths have tests (≥80% coverage on touched files)
 - [ ] No PII anywhere (data, fixtures, screenshots, commit message)
 - [ ] Design doc updated if behaviour changes (or new design doc added)
-- [ ] PR description explains the *why*, not just the *what*
+- [ ] PR description explains why the change is needed
 
 ---
 
@@ -103,13 +101,13 @@ If the bug involves dossier content, **redact everything** (candidate names, sch
 
 Open a GitHub issue titled `[research] <topic>`. Describe the hypothesis, the measurement that would falsify it, and the cost (compute + wall time). The maintainer will route promising directions to a design doc in `docs/plans/`.
 
-The eight open items in [§Limitations & future work of the README](README.md#%EF%B8%8F-limitations--future-work) are good first targets.
+The eight open items in [§Limitations & future work of the README](README.md#limitations--future-work) are good first targets.
 
 ---
 
 ## Porting this system to a different admission filière
 
-The architecture is portable; the **content** is not. If you want to adapt this codebase to a different EPFL programme (Bachelor admission, Master in Data Science, Executive MBA, Doctoral admission) or to a non-EPFL programme entirely, here is the manifest of what to change. Section 9 of [`reports/final_report.pdf`](reports/final_report.pdf) goes through this in more detail.
+The pipeline scaffold ports to other programmes; the prompts, weights, gates, and allow-lists must be rebuilt per filière. If you want to adapt this codebase to a different EPFL programme (Bachelor admission, Master in Data Science, Executive MBA, Doctoral admission) or to a non-EPFL programme entirely, here is the manifest of what to change. Section 9 of [`reports/final_report.pdf`](reports/final_report.pdf) goes through this in more detail.
 
 ### What is generic and stays as-is
 
@@ -164,10 +162,10 @@ None of these estimates include the *calibration cost*: acquiring historical com
 7. [ ] **Falsifiable iterations.** Each prompt or rule change is a hypothesis: changing X should move candidates Y in direction Z. Re-measure on the same sub-cohort. Keep the before/after diff.
 8. [ ] **Bias audit** stratified by gender, nationality, and institution category before the system goes anywhere near a real committee meeting.
 
-The whole port is a **measure-and-close loop on a new corpus**. The codebase exists to make that loop cheap (~$2 / 6 minutes per iteration on a 28-candidate sub-cohort with Sonnet 4.6). The point is not the system — the point is the loop.
+The whole port is a **measure-and-close loop on a new corpus**. The codebase exists to make that loop cheap (~$2 / 6 minutes per iteration on a 28-candidate sub-cohort with Gemini Flash).
 
 ---
 
 ## Code of conduct
 
-Be kind, be concrete, and be specific. We are here to make a measurement loop tighter — that is the only goal.
+Be kind and be specific. Disagreements should come with a number or a reproduction, not an adjective.
