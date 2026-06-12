@@ -7,7 +7,6 @@ reports/*.pdf
 reports/*.html
 # Whitelisted final deliverables (linked from README)
 !reports/final_report.pdf
-!reports/anonymization-audit.pdf
 !reports/architecture-design.pdf
 
 # Copier

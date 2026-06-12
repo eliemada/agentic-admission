@@ -8,7 +8,7 @@ Agentic Admission is a multi-agent LLM panel that triages MTE (Master in Managem
 
 Calibrated against the 2025-26 EPFL-internal cohort, the panel reaches **82% agreement with the committee** (23/28, single-run), **76.6% decision stability** across 5 runs, and **100% anonymisation coverage** on emails, phones, addresses, and Swiss identifiers (>99% on names after two targeted fixes). The whole system is model-agnostic: it runs on Gemini Flash (~$0.08/dossier), Sonnet 4.6 (~$0.70/dossier), or locally on EPFL's SCITAS cluster via vLLM-served Llama 3.1 (~$0).
 
-Final deliverables live in `reports/`: `final_report.typ` (the semester report, builds to ~400 KB PDF), `final_presentation.pptx` (15-slide defence deck), `anonymization-audit.typ`, plus Graphviz architecture diagrams under `reports/figures/`.
+Final deliverables live in `reports/`: `final_report.typ` (the semester report, builds to ~400 KB PDF), `final_presentation.pptx` (15-slide defence deck), plus Graphviz architecture diagrams under `reports/figures/`.
 
 ## Commands
 
@@ -152,7 +152,6 @@ reports/
 ├── final_report.typ                 # Semester report; builds with `typst compile`
 ├── final_report.pdf                 # Rendered (whitelisted in .gitignore, committed)
 ├── final_presentation.pptx          # 15-slide defence deck
-├── anonymization-audit.typ/.pdf     # Anonymisation methodology + coverage numbers
 ├── architecture-design.pdf          # Pre-implementation architecture sketch
 ├── references.bib                   # Report bibliography
 ├── figures/
@@ -217,7 +216,7 @@ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 
 `data/` is gitignored in full. `data/FILE_MAPPING.md` documents the raw Excel inventory and per-year schema differences. `data.tar` (~9.6 GB) holds the full raw application and dossier archive. The processed Parquet at `data/processed/all_candidates.parquet` carries 1,342 candidates across 6 academic years (2020-21 through 2025-26).
 
-PII handling is non-negotiable: every dossier goes through `anonymizer/presidio_pipeline.py` (Presidio + GLiNER + 9 custom post-filters + Swiss-specific recognizers for SCIPER/AVS/IBAN) before any LLM sees it. Audit coverage: 100% on emails, phones, addresses, government IDs; 99.x% on names after two regex fixes. Methodology and stratified-sample numbers are in `reports/anonymization-audit.typ`.
+PII handling is non-negotiable: every dossier goes through `anonymizer/presidio_pipeline.py` (Presidio + GLiNER + 9 custom post-filters + Swiss-specific recognizers for SCIPER/AVS/IBAN) before any LLM sees it. Audit coverage: 100% on emails, phones, addresses, government IDs; 99.x% on names after two regex fixes.
 
 ## Important nuances for future sessions
 
